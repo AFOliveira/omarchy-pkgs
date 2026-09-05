@@ -1,3 +1,5 @@
+> This `riscv/k3` branch includes the experimental native K3 package profile. See [K3 package instructions](ports/k3/README.md). The production release tooling below has not been extended or validated for RISC-V.
+
 # Omarchy Package Repository
 
 Build system for the Omarchy Package Repository. Builds PKGBUILDs from local sources and AUR, signs them, and syncs to production.
