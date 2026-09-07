@@ -13,7 +13,7 @@ pkgname='omarchy-settings'
 _tag=''
 _commit='346e69e1cec6c4e8924531874af6ba010a1bc99e'
 pkgver=4.0.2
-pkgrel=1
+pkgrel=2
 pkgdesc='Omarchy user defaults, /etc/skel content, fonts, plymouth theme, and support helpers'
 # Arch-specific because the shipped /etc tree is not the same on every
 # architecture: the Limine, mkinitcpio, zram and oomd drop-ins belong to the
