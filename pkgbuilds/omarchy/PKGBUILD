@@ -32,7 +32,7 @@ depends=(
   # package satisfy it, leaving a mixed dev/stable install. A versioned
   # dependency can only be satisfied by the real omarchy-settings built
   # from the same _commit, and forces the pair to upgrade together.
-  "omarchy-settings=${pkgver}"
+  "omarchy-settings=${pkgver}-${pkgrel}"
 
   # Wayland / Hyprland core
   'hyprland'

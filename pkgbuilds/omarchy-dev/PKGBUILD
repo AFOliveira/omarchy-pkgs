@@ -18,7 +18,7 @@ conflicts=('omarchy')
 depends=(
   # Omarchy meta
   'omarchy-keyring'
-  'omarchy-settings-dev'
+  "omarchy-settings-dev=${pkgver}-${pkgrel}"
 
   # Wayland / Hyprland core
   'hyprland'
