@@ -7,6 +7,7 @@ srcdir="$test_root/source with spaces"
 mkdir -p "$srcdir/src" "$test_root/bin"
 reset_inputs() {
   chmod -R u+rwX "$srcdir"
+  rm -f "$srcdir/src/fuxi-gmac-ioctl.c"
   printf 'static const struct net_device_ops operations = { };\n' >"$srcdir/src/fuxi-gmac-net.c"
   printf 'yt6801-objs := fuxi-gmac-net.o\n' >"$srcdir/src/Makefile"
 }
@@ -18,6 +19,9 @@ reject() {
 }
 reset_inputs
 check
+: >"$srcdir/src/fuxi-gmac-ioctl.c"
+reject 'dormant private implementation'
+reset_inputs
 printf '.ndo_do_ioctl = handler,\n' >>"$srcdir/src/fuxi-gmac-net.c"
 reject 'private netdev callback'
 reset_inputs

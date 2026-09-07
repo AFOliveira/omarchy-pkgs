@@ -19,10 +19,12 @@ prepare() {
   mkdir -p src
   tar -zxf "${_pkgbase}-${pkgver}.tar.gz" -C src
   patch --fuzz=0 -p1 < patch.diff
+  rm -- src/fuxi-gmac-ioctl.c
 }
 
 check() {
   local result file pattern
+  [[ ! -e $srcdir/src/fuxi-gmac-ioctl.c ]] || return 1
   # A missing or unreadable input is a failed verification, not proof that the
   # private interface is absent. grep returns 1 only for a successful no-match.
   for file in fuxi-gmac-net.c Makefile; do
