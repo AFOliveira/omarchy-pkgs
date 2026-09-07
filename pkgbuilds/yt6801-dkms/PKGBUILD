@@ -3,7 +3,7 @@
 _pkgbase=yt6801
 pkgname=yt6801-dkms
 pkgver=1.0.34
-pkgrel=1
+pkgrel=2
 pkgdesc="Kernel module for Motorcomm YT6801 ethernet controller (DKMS)"
 arch=('x86_64')
 url="https://www.motor-comm.com/product/ethernet-control-chip"
@@ -15,25 +15,38 @@ sha256sums=('877e6953fc6eb47232a74e47b0daf33de0e7f9e9a395d3bc10d500d3c4150af8'
             'a48de70ede7d530383c26f17b2a292143ec3af5e6024c0f4403b954249f52058')
 
 prepare() {
-  cd ${srcdir}
-  mkdir src
-  tar -zxf ${_pkgbase}-${pkgver}.tar.gz -C src
-  patch -p1 < patch.diff
+  cd "$srcdir"
+  mkdir -p src
+  tar -zxf "${_pkgbase}-${pkgver}.tar.gz" -C src
+  patch --fuzz=0 -p1 < patch.diff
 }
 
 check() {
-  if grep -Eq '\.ndo_(do_ioctl|siocdevprivate)' ${srcdir}/src/fuxi-gmac-net.c ||
-    grep -q 'fuxi-gmac-ioctl\.o' ${srcdir}/src/Makefile; then
-    return 1
-  fi
+  local result file pattern
+  # A missing or unreadable input is a failed verification, not proof that the
+  # private interface is absent. grep returns 1 only for a successful no-match.
+  for file in fuxi-gmac-net.c Makefile; do
+    [[ -f $srcdir/src/$file && -r $srcdir/src/$file ]] || return 1
+    if [[ $file == "Makefile" ]]; then
+      pattern='fuxi-gmac-ioctl\.o'
+    else
+      pattern='\.ndo_(do_ioctl|siocdevprivate)'
+    fi
+    if grep -E "$pattern" "$srcdir/src/$file" >/dev/null; then
+      return 1
+    else
+      result=$?
+      (( result == 1 )) || return 1
+    fi
+  done
 }
 
 package() {
-  mkdir -p ${pkgdir}/usr/src/${_pkgbase}-${pkgver}
-  
-  install -Dm644 ${srcdir}/src/*.c ${pkgdir}/usr/src/${_pkgbase}-${pkgver}/
-  install -Dm644 ${srcdir}/src/*.h ${pkgdir}/usr/src/${_pkgbase}-${pkgver}/
-  install -Dm644 ${srcdir}/src/Makefile ${pkgdir}/usr/src/${_pkgbase}-${pkgver}/
-  install -Dm644 ${srcdir}/src/dkms.conf ${pkgdir}/usr/src/${_pkgbase}-${pkgver}/
-  install -Dm644 ${srcdir}/src/motorcomm ${pkgdir}/usr/src/${_pkgbase}-${pkgver}/
+  mkdir -p "$pkgdir/usr/src/${_pkgbase}-${pkgver}"
+
+  install -Dm644 "$srcdir"/src/*.c "$pkgdir/usr/src/${_pkgbase}-${pkgver}/"
+  install -Dm644 "$srcdir"/src/*.h "$pkgdir/usr/src/${_pkgbase}-${pkgver}/"
+  install -Dm644 "$srcdir"/src/Makefile "$pkgdir/usr/src/${_pkgbase}-${pkgver}/"
+  install -Dm644 "$srcdir"/src/dkms.conf "$pkgdir/usr/src/${_pkgbase}-${pkgver}/"
+  install -Dm644 "$srcdir"/src/motorcomm "$pkgdir/usr/src/${_pkgbase}-${pkgver}/"
 }
