@@ -4,7 +4,7 @@ set -euo pipefail
 user_flags=()
 config_home="${XDG_CONFIG_HOME:-}"
 [[ -n "$config_home" || -z "${HOME:-}" ]] || config_home="$HOME/.config"
-flags_file="${config_home:+$config_home/t3code-flags.conf}"
+flags_file="${config_home:+$config_home/perplexity-flags.conf}"
 
 if [[ -n "$flags_file" && -f "$flags_file" && -r "$flags_file" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -16,7 +16,8 @@ if [[ -n "$flags_file" && -f "$flags_file" && -r "$flags_file" ]]; then
 fi
 
 # Chromium's own Ozone detection falls back to XWayland often enough to matter,
-# and the result is a blurry window on every scaled display.
+# and the result is a blurry window on every scaled display. Ask for Wayland
+# directly, unless the user has already picked a platform themselves.
 platform_flags=()
 if [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == wayland ]]; then
   platform_flags=(--ozone-platform=wayland)
@@ -28,4 +29,4 @@ if [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == wayland ]]; then
   done
 fi
 
-exec /usr/lib/t3code/t3code "${platform_flags[@]}" "${user_flags[@]}" "$@"
+exec /opt/Perplexity/perplexity "${platform_flags[@]}" "${user_flags[@]}" "$@"

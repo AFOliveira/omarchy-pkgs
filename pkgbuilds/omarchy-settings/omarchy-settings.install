@@ -1,5 +1,70 @@
+# This lock and removal marker are shared with omarchy-sudo-passwordless.
+# Keep the marker through removal so no grant can be published after its boot
+# cleanup prerequisite disappears. A completed installation clears it again.
+_passwordless_package_transition() (
+  local action=$1 lock_fd directory
+  [[ -d /run && ! -L /run && -d /run/lock && ! -L /run/lock ]] || return 1
+  for directory in /run /run/lock; do
+    [[ $(/usr/bin/stat -Lc '%u' "$directory") == "0" ]] || return 1
+    ! (( 8#$(/usr/bin/stat -Lc '%a' "$directory") & 022 )) || return 1
+  done
+  umask 077
+  exec {lock_fd}>/run/lock/omarchy-sudo-passwordless.lock || return 1
+  /usr/bin/flock -x "$lock_fd" || return 1
+  case "$action" in
+    begin)
+      : >/run/omarchy-sudo-passwordless-package-removing || return 1
+      /usr/bin/rm -f -- /etc/sudoers.d/99-omarchy-nopasswd-* || return 1
+      ;;
+    removed)
+      /usr/bin/rm -f -- /etc/sudoers.d/99-omarchy-nopasswd-* || return 1
+      ;;
+    installed)
+      [[ -f /etc/tmpfiles.d/omarchy-nopasswd-sudo.conf ]] || return 1
+      /usr/bin/rm -f -- /run/omarchy-sudo-passwordless-package-removing || return 1
+      ;;
+    *) return 1 ;;
+  esac
+)
+
+pre_remove() {
+  _passwordless_package_transition begin || {
+    echo "ERROR: Could not revoke temporary Omarchy sudo grants before removing their boot cleanup. Administrator cleanup is required." >&2
+    return 1
+  }
+}
+
+pre_upgrade() {
+  pre_remove
+}
+
+_apple_silicon() {
+  [[ $(uname -m) == aarch64 ]] && grep -aq 'apple,' /proc/device-tree/compatible 2>/dev/null
+}
+
 _etc_overrides_apply() {
   echo "Applying Omarchy etc-overrides..."
+
+  # The hardened CUPS authorization applies on every platform. It waits for the
+  # file the cups package owns: an ISO bootstrap without cups installed is left
+  # alone and picks it up once cups lands.
+  if [[ -f /etc/cups/cups-files.conf && -f /usr/share/omarchy/etc-overrides/cups-cups-files.conf ]]; then
+    systemd-sysusers /etc/sysusers.d/omarchy-cups-browsed.conf
+    install -m 0640 -o root -g cups /usr/share/omarchy/etc-overrides/cups-cups-files.conf /etc/cups/cups-files.conf
+  fi
+
+  # Apple Silicon installs run on Arch Linux ARM's base with the Asahi
+  # packages, and keep that system identity: /etc/os-release stays the
+  # symlink to the distribution's /usr/lib/os-release, and the PAM, NSS,
+  # plymouth and skel overrides below are not applied there.
+  if _apple_silicon; then
+    echo "Preserving Arch Linux ARM system configuration on Apple Silicon..."
+    if [[ -f /usr/lib/os-release ]]; then
+      rm -f /etc/os-release
+      ln -s ../usr/lib/os-release /etc/os-release
+    fi
+    return 0
+  fi
 
   # Ensure parent dirs exist. cups-browsed may not be installed yet during ISO
   # bootstrap; do not create /etc/cups/cups-browsed.conf before the package is
@@ -21,10 +86,6 @@ _etc_overrides_apply() {
     install -d /etc/cups
     cp -f /usr/share/omarchy/etc-overrides/cups-cups-browsed.conf /etc/cups/cups-browsed.conf
   fi
-  if [[ -f /etc/cups/cups-files.conf && -f /usr/share/omarchy/etc-overrides/cups-cups-files.conf ]]; then
-    systemd-sysusers /etc/sysusers.d/omarchy-cups-browsed.conf
-    install -m 0640 -o root -g cups /usr/share/omarchy/etc-overrides/cups-cups-files.conf /etc/cups/cups-files.conf
-  fi
   cp -f /usr/share/omarchy/etc-overrides/plymouth-plymouthd.conf /etc/plymouth/plymouthd.conf
   cp -f /usr/share/omarchy/etc-overrides/dot.bashrc              /etc/skel/.bashrc
   chmod 0644 /etc/os-release /etc/security/faillock.conf /etc/nsswitch.conf \
@@ -35,9 +96,17 @@ _etc_overrides_apply() {
 }
 
 post_install() {
-  _etc_overrides_apply
+  _etc_overrides_apply || return 1
+  _passwordless_package_transition installed
 }
 
 post_upgrade() {
-  _etc_overrides_apply
+  post_install
+}
+
+post_remove() {
+  _passwordless_package_transition removed || {
+    echo "ERROR: Temporary Omarchy sudo grants could not be removed. Administrator cleanup is required." >&2
+    return 1
+  }
 }
