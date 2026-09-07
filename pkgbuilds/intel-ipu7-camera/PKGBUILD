@@ -2,7 +2,7 @@
 
 pkgname=intel-ipu7-camera
 pkgver=1.0.5
-pkgrel=2
+pkgrel=3
 pkgdesc="Intel IPU7 MIPI camera stack for Hurrican/Performance (OV08X40 + hardware ISP)"
 arch=('x86_64')
 url="https://github.com/TsaiGaggery/hurrican_omarchy_enabling"
@@ -70,7 +70,7 @@ sha256sums=(
   'SKIP'
   'SKIP'
   'efa80311f00b9cf2ffbe1831a73e5c648d92b69cbb6f11e9d77df5597e5e83e5'
-  'd29020f75e98a6972f1b4f60475fc0afcbdb132fb13f1759b04216ec38fdf944'
+  '77de3fd74d7df4d9b3a8f39aef7ca77fa58cb58678cc4191b2bd164b16c5386c'
   '1ed034193cf04cc75adc5001242a674a9acd1db8e96bd0b82e38377491c4805b'
   '4f95dac5e120572e41ee934a504b4cf9f80856a84815e981f601a8d5eae23965'
   'f9bc244fce9abd77d4696ac80929964f8b09654a832c9301f2f5eb3cf098c8e4'
@@ -165,20 +165,27 @@ check() {
   local driver_tree="${srcdir}/ipu7-drivers"
   local psys_source="${srcdir}/ipu7-drivers/drivers/media/pci/intel/ipu7/psys/ipu-psys.c"
   local check_tree="${srcdir}/ipu7-drivers-check"
-  local kernel_build
+  local kernel_build kernel_files grep_result result=0 attach_failure
 
-  grep -q 'kvmalloc_array(npages, sizeof(\*pages)' "${psys_source}"
-  grep -q 'attach->len > MAX_RW_COUNT' "${psys_source}"
-  if grep -q 'FOLL_FORCE' "${psys_source}"; then
+  [[ -f $psys_source && -r $psys_source ]] || return 1
+  grep -q 'kvmalloc_array(npages, sizeof(\*pages)' "${psys_source}" || return 1
+  grep -q 'attach->len > MAX_RW_COUNT' "${psys_source}" || return 1
+  if grep 'FOLL_FORCE' "${psys_source}" >/dev/null; then
     return 1
+  else
+    grep_result=$?
+    (( grep_result == 1 )) || return 1
   fi
+  attach_failure=$(sed -n '/^attach_fail:$/,+1p' "$psys_source") || return 1
+  [[ $attach_failure == $'attach_fail:\n\tkbuf->db_attach = NULL;' ]] || return 1
 
   cc -std=c11 -O2 -Wall -Wextra -Werror \
-    "${srcdir}/check-userptr-range.c" -o "${srcdir}/check-userptr-range"
-  "${srcdir}/check-userptr-range"
+    "${srcdir}/check-userptr-range.c" -o "${srcdir}/check-userptr-range" || return 1
+  "${srcdir}/check-userptr-range" || return 1
 
-  kernel_build="$(pacman -Qql linux-headers | sed -n \
-    '\#/build/Makefile$# { s#/Makefile$##; s#^#/#; p; q; }')"
+  kernel_files=$(pacman -Qql linux-headers) || return 1
+  kernel_build="$(sed -n \
+    '\#/build/Makefile$# { s#/Makefile$##; s#^#/#; p; q; }' <<<"$kernel_files")" || return 1
   if [[ ! -f "${kernel_build}/Makefile" ]]; then
     printf 'Unable to locate the linux-headers build tree\n' >&2
     return 1
@@ -188,17 +195,18 @@ check() {
     cd "${srcdir}"
     "${kernel_build}/scripts/checkpatch.pl" --no-tree --strict --no-signoff \
       0005-ipu7-psys-harden-userptr-pinning.patch
-  )
+  ) || return 1
 
-  rm -rf "${check_tree}"
-  cp -a "${driver_tree}" "${check_tree}"
+  rm -rf "${check_tree}" || return 1
+  cp -a "${driver_tree}" "${check_tree}" || return 1
   if ! make -C "${check_tree}" BUILD_INTEL_IPU_ACPI=1 \
     KERNEL_SRC="${kernel_build}"; then
     rm -rf "${check_tree}"
     return 1
   fi
-  test -s "${check_tree}/drivers/media/pci/intel/ipu7/psys/intel-ipu7-psys.ko"
-  rm -rf "${check_tree}"
+  [[ -s ${check_tree}/drivers/media/pci/intel/ipu7/psys/intel-ipu7-psys.ko ]] || result=1
+  rm -rf "${check_tree}" || return 1
+  return "$result"
 }
 
 package() {
