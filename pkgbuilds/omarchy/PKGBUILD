@@ -11,9 +11,9 @@
 #    omarchy-settings must always carry identical _tag/_commit/pkgver/sha256sums.
 pkgname='omarchy'
 _tag=''
-_commit='19eec457b7f18318533cb7225e22b3fd802ac241'
+_commit='7cc9057413246891536d2d2694eb0d4512352e10'
 pkgver=4.0.3rc1
-pkgrel=1
+pkgrel=2
 pkgdesc='Beautiful, modern, and opinionated Arch Linux by DHH'
 # The payload is architecture-independent, but the dependency set is not: the
 # boot stack differs per architecture (see depends_x86_64 / depends_aarch64),
@@ -94,7 +94,7 @@ if [[ -n "${OMARCHY_SRC:-}" ]]; then
   sha256sums=()
 else
   source=("omarchy::git+https://github.com/basecamp/omarchy.git#commit=${_commit}")
-  sha256sums=('07d2a74058d39306e57f54c8df51e234eaf31fd0560f08640cfafdf0823c977d')
+  sha256sums=('0916fdf16de7a469d00115c056a8712d826e3d8e27bb65d08f6749e6f110eee0')
 fi
 
 prepare() {
