@@ -28,6 +28,14 @@ local function setup(env, options)
     return ""
   end
   vim.fn.systemlist = function(cmd)
+    if cmd[2] == "show-options" then
+      real_system({ "sh", "-c", "exit 0" })
+      return { "on" }
+    end
+    if cmd[2] == "display-message" then
+      real_system({ "sh", "-c", failed and "exit 1" or "exit 0" })
+      return { "buffer-test", "" }
+    end
     reads[#reads + 1] = cmd
     real_system({ "sh", "-c", failed and "exit 1" or "exit 0" })
     return vim.deepcopy(read_result or {})
@@ -88,7 +96,7 @@ equal(writes[1], { { "tmux", "load-buffer", "-w", "-" }, large })
 assert(#emitted == 0)
 read_result = { "external buffer" }
 equal(vim.g.clipboard.paste["+"](), read_result)
-equal(reads[1], { "tmux", "save-buffer", "-" })
+equal(reads[1], { "tmux", "save-buffer", "-b", "buffer-test", "-" })
 failed = true
 equal(vim.g.clipboard.paste["+"](), { large, "v" })
 write_failed = true
@@ -119,5 +127,5 @@ vim.g.clipboard.copy["+"]({ "both" }, "v")
 assert(#writes == 2)
 read_result = { "both" }
 equal(vim.g.clipboard.paste["+"](), { { "both" }, "v" })
-equal(reads[1], { "tmux", "save-buffer", "-" })
+equal(reads[1], { "tmux", "save-buffer", "-b", "buffer-test", "-" })
 print("ok - Wayland primary, external, empty and failed reads; SSH prefers tmux")

@@ -56,6 +56,11 @@ function M.setup()
   local has_tmux = in_tmux and vim.fn.executable("tmux") == 1
   local last_copy = {}
 
+  local function tmux_export_enabled()
+    local setting = vim.fn.systemlist({ "tmux", "show-options", "-sv", "set-clipboard" })
+    return vim.v.shell_error == 0 and (setting[1] == "on" or setting[1] == "external")
+  end
+
   local function copy(register)
     local emit = osc52.copy(register)
 
@@ -72,8 +77,21 @@ function M.setup()
 
       if vim.g.omarchy_remote_clipboard_osc52 ~= false then
         if has_tmux and register == "+" then
+          -- tmux ignores zero-byte loads. Record the current buffer's identity
+          -- instead: all Neovim instances see empty until a new buffer arrives,
+          -- without deleting the user's shared tmux clipboard history.
+          if #lines == 0 or (#lines == 1 and lines[1] == "") then
+            vim.fn.system({ "tmux", "set-option", "-sF", "@omarchy-nvim-cleared-buffer", "#{buffer_name}" })
+            return
+          end
           -- Let tmux emit OSC 52, avoiding its input parser's payload size limit.
-          vim.fn.system({ "tmux", "load-buffer", "-w", "-" }, lines)
+          -- Explicit -w bypasses set-clipboard, so honor the user's policy first.
+          local cmd = { "tmux", "load-buffer" }
+          if tmux_export_enabled() then
+            cmd[#cmd + 1] = "-w"
+          end
+          cmd[#cmd + 1] = "-"
+          vim.fn.system(cmd, lines)
           if vim.v.shell_error == 0 then
             return
           end
@@ -86,11 +104,21 @@ function M.setup()
   local function paste(register)
     return function()
       local cmd
-      -- tmux's buffer is shared between Neovim instances in the session. Over
+      -- tmux's buffer is shared between Neovim instances on the server. Over
       -- SSH, prefer it to the remote machine's unrelated graphical clipboard.
       if has_tmux and register == "+" and (in_ssh or not has_wayland)
         and vim.g.omarchy_remote_clipboard_osc52 ~= false then
-        cmd = { "tmux", "save-buffer", "-" }
+        local buffers = vim.fn.systemlist({ "tmux", "display-message", "-p",
+          "#{buffer_name}\n#{@omarchy-nvim-cleared-buffer}" })
+        if vim.v.shell_error ~= 0 then
+          return vim.deepcopy(last_copy[register] or { {}, "v" })
+        end
+        if not buffers[1] or buffers[1] == "" or buffers[1] == buffers[2] then
+          return { {}, "v" }
+        end
+        -- Pin the buffer selected above: a concurrent copy must not change
+        -- which payload we read after checking its identity against the marker.
+        cmd = { "tmux", "save-buffer", "-b", buffers[1], "-" }
       elseif has_wayland then
         cmd = { "wl-paste", "--no-newline" }
         if register == "*" then
