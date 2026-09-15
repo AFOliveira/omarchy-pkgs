@@ -9,26 +9,42 @@ url="https://www.cursor.com"
 license=('LicenseRef-Cursor_EULA')
 # upstream uses Electron newer than internal VSCode
 _electron=electron42
-depends=('hicolor-icon-theme')
-depends_x86_64=(xdg-utils ripgrep $_electron nodejs gcc-libs libxkbfile)
-depends_aarch64=(fuse2)
-makedepends_aarch64=(squashfs-tools)
+depends=(xdg-utils gcc-libs hicolor-icon-theme libxkbfile)
+depends_x86_64=(ripgrep $_electron nodejs)
+# ARM retains bundled Electron because electron42 is unavailable in ALARM.
+depends_aarch64=(
+  alsa-lib at-spi2-core ca-certificates cairo curl dbus expat glib2 glibc gtk3
+  libcups libsecret libx11 libxcb libxcomposite libxdamage libxext libxfixes
+  libxkbcommon libxrandr mesa nspr nss pango systemd-libs which
+)
 options=(!strip !debug) # Don't break ext of VSCode
 _commit=f09fca384ceca23f7bf21f9c23655b162641d747
 source_x86_64=("https://downloads.cursor.com/production/${_commit}/linux/x64/deb/amd64/deb/cursor_${pkgver}_amd64.deb"
 "https://gitlab.archlinux.org/archlinux/packaging/packages/code/-/raw/main/code."{sh,mjs}
 rg.sh)
 sha512sums_x86_64=('8329138d207309d16410f1cb58da18eea1a034a35f2bdd022ef9b373bb8f1b3d80e489e65256b7283c40e10da77962d158bfa3a64e742337a942633810d80dbe' '937299c6cb6be2f8d25f7dbc95cf77423875c5f8353b8bd6cd7cc8e5603cbf8405b14dbf8bd615db2e3b36ed680fc8e1909410815f7f8587b7267a699e00ab37' '793f9ff6306e3992ac89802d98110cba288ea1181a901467333293b7d76182ef9792c2a39ff49d9347a18a174b1f42bc58862091dff583f4146c2704eea28033' 'e79fe7659f59d1ae02fc68816399bfd31587315df6cdb6ccf1d0ca76f7cdc692c2a42b30591c0091147bd97ef14b1c7745dc26bd7cb3ea6bba45698e5044fa2a')
-noextract=(cursor_${pkgver}_amd64.deb "Cursor-${pkgver}-aarch64.AppImage") # avoid double tarball
-source_aarch64=("Cursor-${pkgver}-aarch64.AppImage::https://downloads.cursor.com/production/${_commit}/linux/arm64/Cursor-${pkgver}-aarch64.AppImage")
-sha512sums_aarch64=('7612459f1d9338ba4c2df8e223412901d6c8785f0439e80ae771fe5037f39ac7016a2004589d1049f8f2d254ae06236942193d99558b49960309113e7faeb72e')
+source_aarch64=("https://downloads.cursor.com/production/${_commit}/linux/arm64/deb/arm64/deb/cursor_${pkgver}_arm64.deb")
+sha512sums_aarch64=('fe2e2bb77901d24bc2e21b1528b8fef2f75e5b68078f47ea96109f2903dea730a074b851a56f9a0d5404dc35243e2a7f156cbd24a5c687df74590a9b93ce0bad')
+noextract=(cursor_${pkgver}_amd64.deb cursor_${pkgver}_arm64.deb) # avoid double tarball
 _app=usr/share/cursor/resources/app
-_package_x86_64() {
-  # Exclude electron
-  bsdtar -xOf ${noextract[0]} data.tar.xz | tar -xJf - -C "$pkgdir" \
-    --exclude 'usr/share/cursor/[^r]*' --exclude 'usr/share/cursor/*.pak'
+package() {
+  local deb="cursor_${pkgver}_amd64.deb"
+  local -a excludes=(--exclude 'usr/share/cursor/[^r]*' --exclude 'usr/share/cursor/*.pak')
+  if [[ "$CARCH" == aarch64 ]]; then
+    deb="cursor_${pkgver}_arm64.deb"
+    # Keep bundled Electron; omit Debian's AppArmor and sysctl settings.
+    excludes=(--exclude './etc')
+  fi
+  bsdtar -xOf "${srcdir}/${deb}" data.tar.xz | tar -xJf - -C "$pkgdir" "${excludes[@]}"
   cd "$pkgdir"
   mv usr/share/zsh/{vendor-completions,site-functions}
+  if [[ "$CARCH" == aarch64 ]]; then
+    install -d usr/bin
+    ln -s /usr/share/cursor/bin/cursor usr/bin/cursor
+    # Use Electron's unprivileged namespace sandbox.
+    chmod 0755 usr/share/cursor/chrome-sandbox
+    return
+  fi
   ln -sf /usr/bin/node ${_app}/resources/helpers/node
   install -Dm755 "${srcdir}/rg.sh" ${_app}/node_modules/@vscode/ripgrep/bin/rg
   ln -sf /usr/bin/xdg-open ${_app}/node_modules/open/xdg-open
@@ -39,71 +55,4 @@ _package_x86_64() {
     -e "s|name=electron|name=${_electron}|" "${srcdir}"/code.sh | install -Dm755 /dev/stdin "${pkgdir}"/usr/share/cursor/cursor
   install -d "$pkgdir"/usr/bin
   ln -sf /usr/share/cursor/cursor "$pkgdir"/usr/bin/cursor
-}
-
-# ARM keeps the vendor Electron runtime; x86_64 retains system Electron.
-prepare() {
-  [[ "$CARCH" == aarch64 ]] || return 0
-  local img="${srcdir}/Cursor-${pkgver}-aarch64.AppImage"
-  local offset
-  offset="$(LC_ALL=C grep -aobm1 $'hsqs' "$img" | cut -d: -f1)"
-  [[ -n "$offset" ]] || { echo "no squashfs (hsqs) magic in $img" >&2; return 1; }
-  # -no-xattrs: the squashfs carries security.selinux, and unsquashfs exits 2
-  # when the builder user cannot write them. Extract only the desktop/icon
-  # trees; the AppImage itself is the runtime payload.
-  unsquashfs -no-xattrs -f -o "$offset" -d "${srcdir}/squashfs-root" "$img" \
-    usr/share/applications usr/share/icons usr/share/pixmaps
-}
-
-_rewrite_desktop() {
-  local src="$1" dest="$2"
-  # Embedded Exec lines are /usr/share/cursor/cursor plus arguments (%F,
-  # --new-window %F, --open-url %U). Rewrite only the binary path.
-  sed -E \
-    -e 's|^Exec=/usr/share/cursor/cursor|Exec=/usr/bin/cursor|' \
-    -e 's|^TryExec=.*|TryExec=/usr/bin/cursor|' \
-    "$src" | install -Dm644 /dev/stdin "$dest"
-}
-
-_package_aarch64() {
-  install -Dm755 "${srcdir}/Cursor-${pkgver}-aarch64.AppImage" \
-    "${pkgdir}/opt/cursor-bin/cursor.AppImage"
-
-  install -Dm755 /dev/stdin "${pkgdir}/usr/bin/cursor" <<'EOF'
-#!/bin/bash
-exec /opt/cursor-bin/cursor.AppImage "$@"
-EOF
-
-  local root="${srcdir}/squashfs-root"
-  _rewrite_desktop \
-    "$root/usr/share/applications/cursor.desktop" \
-    "${pkgdir}/usr/share/applications/cursor.desktop"
-  _rewrite_desktop \
-    "$root/usr/share/applications/cursor-url-handler.desktop" \
-    "${pkgdir}/usr/share/applications/cursor-url-handler.desktop"
-
-  local icon_src icon_dest
-  while IFS= read -r -d '' icon_src; do
-    icon_dest="${icon_src#"$root"}"
-    # Desktop files say Icon=co.anysphere.cursor; the hicolor set in the
-    # squashfs is named cursor.png. Install under the name the entries use.
-    if [[ "$(basename "$icon_dest")" == cursor.png ]]; then
-      icon_dest="$(dirname "$icon_dest")/co.anysphere.cursor.png"
-    elif [[ "$(basename "$icon_dest")" == cursor.svg ]]; then
-      icon_dest="$(dirname "$icon_dest")/co.anysphere.cursor.svg"
-    fi
-    install -Dm644 "$icon_src" "${pkgdir}${icon_dest}"
-  done < <(find "$root/usr/share/icons" -type f \( -name '*.png' -o -name '*.svg' \) -print0 2>/dev/null)
-
-  if [[ -f "$root/usr/share/pixmaps/co.anysphere.cursor.png" ]]; then
-    install -Dm644 "$root/usr/share/pixmaps/co.anysphere.cursor.png" \
-      "${pkgdir}/usr/share/pixmaps/co.anysphere.cursor.png"
-  fi
-}
-
-package() {
-  case "$CARCH" in
-    x86_64) _package_x86_64 ;;
-    aarch64) _package_aarch64 ;;
-  esac
 }
