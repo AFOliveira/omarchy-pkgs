@@ -2,24 +2,48 @@
 # Keep the marker through removal so no grant can be published after its boot
 # cleanup prerequisite disappears. A completed installation clears it again.
 _passwordless_package_transition() (
-  local action=$1 lock_fd directory
-  [[ -d /run && ! -L /run && -d /run/lock && ! -L /run/lock ]] || return 1
-  for directory in /run /run/lock; do
-    [[ $(/usr/bin/stat -Lc '%u' "$directory") == "0" ]] || return 1
-    ! (( 8#$(/usr/bin/stat -Lc '%a' "$directory") & 022 )) || return 1
-  done
+  local action=$1 lock_fd directory rule
+  # Scriptlets run under ordinary Bash with pacman's environment. The sweep
+  # below relies on pathname expansion, so it must not inherit glob state.
+  unset GLOBIGNORE
+  set +f
+  [[ -d /run && ! -L /run ]] || return 1
+  [[ $(/usr/bin/stat -Lc '%u' /run) == "0" ]] || return 1
+  ! (( 8#$(/usr/bin/stat -Lc '%a' /run) & 022 )) || return 1
   umask 077
+  case "$action" in
+    begin|installed)
+      # Refuse publication before waiting for the lock: a timeout, a failed
+      # lock directory, or an interrupted transaction must not leave the
+      # namespace unguarded. The publisher rechecks this marker after it
+      # publishes, so it needs no lock to take effect.
+      : >/run/omarchy-sudo-passwordless-package-removing || return 1
+      ;;
+  esac
+  [[ -d /run/lock && ! -L /run/lock ]] || return 1
+  [[ $(/usr/bin/stat -Lc '%u' /run/lock) == "0" ]] || return 1
+  ! (( 8#$(/usr/bin/stat -Lc '%a' /run/lock) & 022 )) || return 1
   exec {lock_fd}>/run/lock/omarchy-sudo-passwordless.lock || return 1
-  /usr/bin/flock -x "$lock_fd" || return 1
+  # Grant operations are short; a stalled holder must not hang pacman's
+  # transaction indefinitely.
+  /usr/bin/flock -x -w 60 "$lock_fd" || return 1
   case "$action" in
     begin)
-      : >/run/omarchy-sudo-passwordless-package-removing || return 1
       /usr/bin/rm -f -- /etc/sudoers.d/99-omarchy-nopasswd-* || return 1
       ;;
     removed)
       /usr/bin/rm -f -- /etc/sudoers.d/99-omarchy-nopasswd-* || return 1
       ;;
     installed)
+      # pacman does not stop a transaction on a failed scriptlet, so a failed
+      # or interrupted pre-transaction cleanup can be followed by this step,
+      # and a fresh install has no earlier step at all. The blocker written
+      # above holds while sweeping, so a failure here leaves publication
+      # refused; certify completion only with the reserved namespace empty.
+      /usr/bin/rm -f -- /etc/sudoers.d/99-omarchy-nopasswd-* || return 1
+      for rule in /etc/sudoers.d/99-omarchy-nopasswd-*; do
+        [[ ! -e $rule && ! -L $rule ]] || return 1
+      done
       [[ -f /etc/tmpfiles.d/omarchy-nopasswd-sudo.conf ]] || return 1
       /usr/bin/rm -f -- /run/omarchy-sudo-passwordless-package-removing || return 1
       ;;
@@ -96,8 +120,15 @@ _etc_overrides_apply() {
 }
 
 post_install() {
-  _etc_overrides_apply || return 1
-  _passwordless_package_transition installed
+  local status=0
+  # Recover the grant lifecycle before optional configuration work, so a
+  # later override failure cannot strand the machine-wide blocker.
+  _passwordless_package_transition installed || {
+    echo "ERROR: Temporary Omarchy sudo grants remain or their boot cleanup is missing; passwordless sudo stays disabled until this package installs cleanly." >&2
+    status=1
+  }
+  _etc_overrides_apply || status=1
+  return "$status"
 }
 
 post_upgrade() {
