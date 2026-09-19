@@ -1,7 +1,7 @@
 # Maintainer: Omarchy <packages@omarchy.org>
 
 pkgname=intel-ipu7-camera
-pkgver=1.0.5
+pkgver=1.0.6
 pkgrel=3
 pkgdesc="Intel IPU7 MIPI camera stack for Hurrican/Performance (OV08X40 + hardware ISP)"
 arch=('x86_64')
@@ -37,18 +37,44 @@ _ipu7_camera_bins_commit="403c67db6b279dd02752f11db6a34552f31a3ac5"
 _ipu7_camera_hal_commit="b1f6ebef12111fb5da0133b144d69dd9b001836c"
 _icamerasrc_commit="4fb31db76b618aae72184c59314b839dedb42689"
 
+# Linux 7.2 moved the Intel CVS (Computer Vision Sensing) controller into the
+# IPU media graph: ipu-bridge now places it between the sensor and the IPU
+# CSI2 receiver as an "Intel CVS" V4L2 bridge sub-device, provided by the
+# in-tree drivers/media/i2c/cvs driver. The legacy vision-drivers misc driver
+# has no such sub-device, so on 7.2 the sensor never joins the graph and the
+# HAL finds no camera. We ship the in-tree driver as a DKMS module
+# for 7.2+ kernels (Arch-derived kernel configs cannot enable it: the option
+# is hidden behind MEDIA_HIDE_ANCILLARY_SUBDRV) and keep vision-drivers for
+# older kernels. Both dkms.conf files carry matching BUILD_EXCLUSIVE_KERNEL.
+#
+# 0007 is the upstream fix for the audio regression on the Dell XPS 14
+# DA14260: the driver requested its "wake" GPIO, which shares a pin with the
+# CS35L57 amplifiers' speaker-ID GpioIo, so every cs35l56 probe failed with
+# -EBUSY and the sound card never appeared. Drop it once the stable tag
+# fetched below contains the fix.
+_intel_cvs_kernel_tag="v7.2.5"
+_intel_cvs_url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/media/i2c/cvs"
+
 source=(
   "ipu7-drivers::git+https://github.com/intel/ipu7-drivers.git#commit=${_ipu7_drivers_commit}"
   "vision-drivers::git+https://github.com/intel/vision-drivers.git#commit=${_vision_drivers_commit}"
   "ipu7-camera-bins::git+https://github.com/intel/ipu7-camera-bins.git#commit=${_ipu7_camera_bins_commit}"
   "ipu7-camera-hal::git+https://github.com/intel/ipu7-camera-hal.git#commit=${_ipu7_camera_hal_commit}"
   "icamerasrc::git+https://github.com/intel/icamerasrc.git#commit=${_icamerasrc_commit}"
+  "intel-cvs-core.c::${_intel_cvs_url}/core.c?h=${_intel_cvs_kernel_tag}"
+  "intel-cvs-v4l2.c::${_intel_cvs_url}/v4l2.c?h=${_intel_cvs_kernel_tag}"
+  "intel-cvs-icvs.h::${_intel_cvs_url}/icvs.h?h=${_intel_cvs_kernel_tag}"
   "0004-ipu7-psys-register-device-bus.patch"
   "0005-ipu7-psys-harden-userptr-pinning.patch"
   "check-userptr-range.c"
   "0003-icvs-set-rgbcamera_pwrup_host-0-for-Panther-Lake.patch"
+  "0005-camhal-MediaControl-route-through-Intel-CVS-bridge.patch"
+  "0006-camhal-ipu75xa-ov08x40-Intel-CVS-formats.patch"
+  "0007-media-i2c-cvs-get-the-wake-irq-without-claiming-the-gpio.patch"
   "dkms-ipu7-drivers.conf"
   "dkms-vision-drivers.conf"
+  "dkms-intel-cvs.conf"
+  "intel-cvs-Makefile"
   "camera-deps.conf"
   "v4l2loopback-modprobe.conf"
   "camera-init.service"
@@ -64,30 +90,14 @@ source=(
   "v4l2-relayd-ipu7-override.conf"
 )
 sha256sums=(
-  'SKIP'
-  'SKIP'
-  'SKIP'
-  'SKIP'
-  'SKIP'
-  'efa80311f00b9cf2ffbe1831a73e5c648d92b69cbb6f11e9d77df5597e5e83e5'
-  '114370e19a32350a4b5989b52aa4da68c4675d1eb86eb1199c54fb6d82594f74'
-  '1ed034193cf04cc75adc5001242a674a9acd1db8e96bd0b82e38377491c4805b'
-  '4f95dac5e120572e41ee934a504b4cf9f80856a84815e981f601a8d5eae23965'
-  'f9bc244fce9abd77d4696ac80929964f8b09654a832c9301f2f5eb3cf098c8e4'
-  'fa2dd2e79c5c1bfd205a5d99f6ed55aee0e9ea785b471de056ce853afecc51c0'
-  'b099b7d7a96c08bd7751e671c885c8e5a4e3b4b65ed8f73db93568fd49025d3a'
-  'c817de3a1a32dc61dc8496a5e94594232a8fc0dcc0fd17407b0a3479b74facbc'
-  '20b2a7f6527c6e651907e44366151f93dfb6c14076ed2af0f3a92cde6295f5b8'
-  'e7c7e5b9c6a88d7665f799dd89ee69066fd3d4eb58c3c594caeb837ad8cfe5e9'
-  'ee98ea71af7498fc169818a89e8df5afbf83ee859ddd3f1d96e0ddce5a42c73a'
-  '2fb30310cfeb501738391f2c7e192dc52d6ce17211d1cc285c758ccc9e269ec9'
-  '81043c96d53b9a4f13b68701bcfd03c9715d2ed1d8e998b24d519b2ae1e5c481'
-  'e164a48b49069bb397f15854f4a0c5a509baebdce982b8b1bfb7e09680d74e33'
-  '60860ef75b5d6f2969d6df7f8e67d59093cc198a9ffd1322baff4acb8a7b8990'
-  '228273640621e54784f8b75bf17c76f97f58fd6608d27bd40f0a7eb7743f26c7'
-  '4983e6a5a175a91d00387463cf2fb69fd6ea7473f4bc057d442d447390250657'
-  '2c26b850f7f5691c6b857ab7785d1092a7ad9b60d6361bbcfc174353719acf3e'
-  'c586f06dfab097f7a5d90c8adb4148fcc7bdb0dbb39a674986dab6c2492eae47'
+  'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
+  'b4a90ad1815c02e4cadc1b5ad6c576ae0b150cb365c68d2c934cf964a995d91f'
+  'e988014f54b1b5183e9ef43b602d73bbc2c991f19a8d503560a8cdba112b76c6'
+  '6dcd5201fb78766a440038c8eba2cc8c3892064ba829065e2269c30dc1905983'
+  'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
+  'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
+  'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
+  'SKIP' 'SKIP' 'SKIP'
 )
 
 prepare() {
@@ -103,6 +113,20 @@ prepare() {
   if ! git log --oneline -1 | grep -q "rgbcamera_pwrup_host"; then
     git am "${srcdir}/0003-icvs-set-rgbcamera_pwrup_host-0-for-Panther-Lake.patch"
   fi
+
+  # Route the media graph through the Linux 7.2 "Intel CVS" bridge entity
+  cd "${srcdir}/ipu7-camera-hal"
+  patch -Np1 -i "${srcdir}/0005-camhal-MediaControl-route-through-Intel-CVS-bridge.patch"
+  patch -Np1 -i "${srcdir}/0006-camhal-ipu75xa-ov08x40-Intel-CVS-formats.patch"
+
+  # Intel CVS: take the wake IRQ without claiming the GPIO (shared with the
+  # speaker-ID line on the XPS 14). makepkg symlinks plain downloads into
+  # srcdir and patch refuses to touch a symlink, so patch a real copy. The
+  # patch is against a/drivers/media/i2c/cvs/core.c, hence -p5.
+  cp --remove-destination "$(readlink -f "${srcdir}/intel-cvs-core.c")" \
+    "${srcdir}/intel-cvs-core.c"
+  patch -p5 -F0 --no-backup-if-mismatch "${srcdir}/intel-cvs-core.c" \
+    < "${srcdir}/0007-media-i2c-cvs-get-the-wake-irq-without-claiming-the-gpio.patch"
 
   # Stage proprietary libs/headers for build-time use
   local staging="${srcdir}/staging"
@@ -218,12 +242,21 @@ package() {
   install -Dm644 "${srcdir}/dkms-ipu7-drivers.conf" "${ipu7_dkms_dir}/dkms.conf"
   sed -i "s/@PKGVER@/${pkgver}/" "${ipu7_dkms_dir}/dkms.conf"
 
-  # DKMS: Vision drivers (CVS)
+  # DKMS: legacy Vision drivers (CVS misc driver), kernels before 7.2
   local cvs_dkms_dir="${pkgdir}/usr/src/vision-drivers-${pkgver}"
   install -dm755 "${cvs_dkms_dir}"
   cp -r "${srcdir}/vision-drivers/"* "${cvs_dkms_dir}/"
   install -Dm644 "${srcdir}/dkms-vision-drivers.conf" "${cvs_dkms_dir}/dkms.conf"
   sed -i "s/@PKGVER@/${pkgver}/" "${cvs_dkms_dir}/dkms.conf"
+
+  # DKMS: in-tree Linux 7.2 Intel CVS V4L2 bridge driver, kernels 7.2+
+  local icvs_dkms_dir="${pkgdir}/usr/src/intel-cvs-${pkgver}"
+  install -Dm644 "${srcdir}/intel-cvs-core.c" "${icvs_dkms_dir}/core.c"
+  install -Dm644 "${srcdir}/intel-cvs-v4l2.c" "${icvs_dkms_dir}/v4l2.c"
+  install -Dm644 "${srcdir}/intel-cvs-icvs.h" "${icvs_dkms_dir}/icvs.h"
+  install -Dm644 "${srcdir}/intel-cvs-Makefile" "${icvs_dkms_dir}/Makefile"
+  install -Dm644 "${srcdir}/dkms-intel-cvs.conf" "${icvs_dkms_dir}/dkms.conf"
+  sed -i "s/@PKGVER@/${pkgver}/" "${icvs_dkms_dir}/dkms.conf"
 
   # Firmware
   install -dm755 "${pkgdir}/usr/lib/firmware/intel/ipu"
