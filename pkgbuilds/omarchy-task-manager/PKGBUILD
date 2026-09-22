@@ -12,7 +12,7 @@ optdepends=('gdb: live process core dumps' 'nvidia-utils: NVIDIA device telemetr
 makedepends=('cmake' 'ninja' 'rust' 'cargo')
 checkdepends=('python' 'desktop-file-utils')
 source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
-sha256sums=('a8be937c6df43a01893c0955dfa53953a9ef06660144b1562445dacf64bbbbfb')
+sha256sums=('4759054e2396993886bf2f0abcc74ddf3d5c3499274d69d6fc5f51521a84354a')
 
 build() {
   cmake -S "$srcdir/$pkgname-$pkgver" -B build -G Ninja \
