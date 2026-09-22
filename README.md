@@ -891,15 +891,15 @@ The repository includes GitHub workflows and systemd services for automated rele
 
 1. **sync-upstream.yml** (Every 6 hours): Watches direct upstream feeds and updates owned recipes on the reviewed lane. Successful package updates reach a PR even if another feed fails; failed recipes stay untouched and the workflow remains red.
 2. **sync-rebuilds.yml** (Every 6 hours): Bumps pkgrel for packages whose `rebuild_on` dependencies have moved in the official repositories and opens a PR.
-3. **track-branches.yml** (Every 2 hours): The unattended lane. Pins every `"auto_merge": true` package to the newest tip of its watched branch that has sat there for `min_release_age`, opens one PR for all of them, and enables auto-merge. Packages pinned from the same branch move together or not at all. The PR builds like any other; a tip that fails to build stays an open red PR until the next tick supersedes it.
+3. **track-branches.yml** (Every 2 hours): The unattended lane. Pins every `"auto_merge": true` package to the tip of its watched branch once its commit timestamp clears `min_release_age`, opens one PR for all of them, and enables auto-merge. Packages pinned from the same branch move together or not at all, including targeted syncs. The PR builds like any other; a tip that fails to build stays an open red PR until the next tick supersedes it.
 
-The sync PRs are opened with a GitHub App token (`PKGS_BOT_APP_ID` and
+The tracking PR is opened with a GitHub App token (`PKGS_BOT_APP_ID` and
 `PKGS_BOT_PRIVATE_KEY` secrets; the App needs Contents and Pull requests
 write on this repository). A PR opened with the workflow's own `GITHUB_TOKEN`
 has its build and test runs held until a maintainer approves them, and an
 auto-merge it enabled would land without running the publish workflow. The
-reviewed workflows fall back to `GITHUB_TOKEN` when the App is not configured
-(and then need that click); the tracker refuses to run without it.
+tracker requires both App secrets before it runs. The reviewed sync workflows
+continue to use `GITHUB_TOKEN` and require maintainer approval as before.
 
 To approve builds for an unvouched contributor's PR, apply **`build-approved`**.
 Until approval, the PR shows **Awaiting build approval** and its required

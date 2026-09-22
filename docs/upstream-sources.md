@@ -72,16 +72,40 @@ uses it. The Omarchy dev pair uses `{version}.r{count}.g{commit:.7}` instead
 because its published history counted every commit and the number must never
 go down.
 
-`min_release_age` on a branch watch selects the newest commit that has been on
-the branch for at least that long, so a burst of pushes builds once after it
-settles rather than once per push. `BYPASS_MIN_RELEASE_AGE=1` takes the tip.
+`min_release_age` holds a branch tip until its commit timestamp is old enough.
+A fresh tip leaves the existing pin alone; the watch never walks backward to
+an older commit. This uses Git's committer date, not the time a commit was
+pushed. `BYPASS_MIN_RELEASE_AGE=1` bypasses the hold.
 
 Packages marked `"auto_merge": true` ride the unattended lane
 (`track-branches.yml`) instead of the reviewed sync PR: their bump PR is opened
 and auto-merged as soon as the build checks pass. `bin/sync-upstream --lane
 reviewed|auto-merge|all` selects a lane; the scheduled workflows each pass their
 own. Packages that pin the same branch move in lockstep: if one of them fails
-to update, the run restores the others and reports the group as failed.
+to update, the run restores the others and reports the group as failed. A
+targeted sync includes the other packages watching that branch, so requesting
+only `omarchy-dev` also updates `omarchy-settings-dev`.
+
+### Enable unattended branch updates
+
+The schedule already runs in GitHub Actions; no server cron job is needed.
+It needs a GitHub App identity so its PRs trigger builds and its merges trigger
+publishing without manual approval:
+
+1. [Create an organization GitHub App](https://github.com/organizations/omacom/settings/apps/new).
+   Use this repository's URL as the homepage, disable webhooks, and grant only
+   repository **Contents: Read and write** and **Pull requests: Read and write**
+   (Metadata read access is automatic). Limit installation to this organization.
+2. Install the App on **omacom/omarchy-pkgs** only.
+3. Generate a private key from the App's settings. In the repository's
+   [Actions secrets](https://github.com/omacom/omarchy-pkgs/settings/secrets/actions),
+   save the App ID as `PKGS_BOT_APP_ID` and the PEM key contents as
+   `PKGS_BOT_PRIVATE_KEY`.
+4. Keep **Allow auto-merge** enabled and require `result`, `self-tests`, and
+   `build-isolation` on `master`; the App does not need a protection bypass.
+5. After merging the tracker, run **Track upstream branches** once from Actions
+   to verify that its PR builds, auto-merges, and starts **Publish merged packages**.
+   Subsequent runs happen every two hours.
 
 Checksums retain their algorithms (SHA256, SHA512, BLAKE2, etc.) and source order.
 Changed git sources are hashed with makepkg's git-archive convention. Unchanged

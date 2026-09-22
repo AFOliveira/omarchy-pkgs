@@ -184,10 +184,9 @@ def matches(watch, text, extra=None, full=False):
             yield candidate(watch, {**(extra or {}), **match.groupdict()})
 
 
-def git_branch_tip(url, branch, tag_pattern, cache, min_age=0, now=None):
-    """Describe the newest commit on an upstream branch that has sat there for
-    at least min_age seconds (the branch analogue of "the newest release older
-    than the window ships"): commit, total count, date, and with a tag_pattern
+def git_branch_tip(url, branch, tag_pattern, cache):
+    """Describe the current tip of an upstream branch:
+    commit, total count, date, and with a tag_pattern
     the newest release tag reachable from it plus the distance from that tag,
     so a branch build can be versioned <tag>.r<n>.g<sha>, above the release it
     follows and below the next one, the way a pkgver() function would.
@@ -195,7 +194,8 @@ def git_branch_tip(url, branch, tag_pattern, cache, min_age=0, now=None):
     One blobless single-branch clone per (url, branch) per run, shared by
     every package that tracks it, so two recipes pinned from one clone always
     see the same commit. The clone is read with git only; nothing in it runs.
-    Returns None when every commit is younger than the window.
+    select_release applies the age hold to this tip, without walking back
+    into history (which could select a commit from a merged side branch).
     """
     https(url)
     key = hashlib.sha256(f"{url}#{branch}".encode()).hexdigest()
@@ -205,14 +205,7 @@ def git_branch_tip(url, branch, tag_pattern, cache, min_age=0, now=None):
         subprocess.run(["git", "clone", "--quiet", "--bare", "--filter=blob:none", "--single-branch", "--branch", branch, url, str(scratch)], check=True)
         scratch.replace(work)
     git = ["git", "-C", str(work)]
-    selector = ["HEAD"]
-    if min_age:
-        cutoff = (now or dt.datetime.now(dt.timezone.utc)) - dt.timedelta(seconds=min_age)
-        selector = ["-1", f"--before={cutoff.isoformat()}", "HEAD"]
-    commit = run([*git, "rev-list", *selector], text=True).split()[:1]
-    if not commit:
-        return None
-    commit = commit[0]
+    commit = run([*git, "rev-parse", "HEAD"], text=True).strip()
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("branch tip is not a commit")
     count = run([*git, "rev-list", "--count", commit], text=True).strip()
@@ -238,7 +231,7 @@ def git_branch_tip(url, branch, tag_pattern, cache, min_age=0, now=None):
     return values
 
 
-def discover(watch, fetch, min_age=0):
+def discover(watch, fetch):
     provider = validate(watch)
     feed = watch[provider]
     results = []
@@ -265,9 +258,7 @@ def discover(watch, fetch, min_age=0):
         for tag, commit in tags.items():
             results.extend(matches(watch, tag, {"tag": tag, "commit": commit}, full=True))
     elif provider == "git_branch":
-        tip = git_branch_tip(feed, watch["branch"], watch.get("tag_pattern"), fetch.cache, min_age)
-        if tip is None:
-            return []  # nothing has settled for min_age yet: wait, not an error
+        tip = git_branch_tip(feed, watch["branch"], watch.get("tag_pattern"), fetch.cache)
         results.append(candidate(watch, tip))
     elif provider == "npm":
         data = fetch.json("https://registry.npmjs.org/" + quote(feed, safe=""))
@@ -543,7 +534,7 @@ def sync(package, fetch, min_age=0, check=False):
     original = path.read_text()
     before = read_recipe(path)
     bypass = os.environ.get("BYPASS_MIN_RELEASE_AGE") == "1"
-    release = select_release(discover(watch, fetch, 0 if bypass else min_age), min_age, bypass=bypass)
+    release = select_release(discover(watch, fetch), min_age, bypass=bypass)
     if release is None:
         return {"status": "skipped", "reason": "minimum release age"}
     current = scalar(before, "pkgver")

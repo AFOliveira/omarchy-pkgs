@@ -1093,11 +1093,12 @@ enforce_branch_lockstep() {
     groups["$key"]+="$package "
   done
   for key in "${!groups[@]}"; do
-    local members commits
+    local members commits pin
     read -r -a members <<<"${groups[$key]}"
     (( ${#members[@]} > 1 )) || continue
     commits=$(for package in "${members[@]}"; do
-      grep -m1 -E '^_commit=' "$PKGBUILDS_DIR/$package/PKGBUILD" | cut -d= -f2- | tr -d "\"'"
+      pin=$(grep -m1 -E '^_commit=' "$PKGBUILDS_DIR/$package/PKGBUILD" | cut -d= -f2- | tr -d "\"'" || true)
+      printf '%s\n' "${pin:-missing:$package}"
     done | sort -u | grep -c .)
     (( commits > 1 )) || continue
     print_error "Lockstep violation on $key: ${members[*]} pin different commits; restoring all of them"
@@ -1115,17 +1116,34 @@ enforce_branch_lockstep() {
 
 sync_in_lane() {
   local package="$1" package_dir="$PKGBUILDS_DIR/$1"
+  snapshot_package "$package"
   if [[ -d "$package_dir" ]] && ! package_in_lane "$package_dir" "$LANE"; then
     print_info "Skipping $package: not in the $LANE lane"
     ((++SKIPPED))
     return 0
   fi
-  snapshot_package "$package"
   sync_package "$package"
 }
 
 if [[ ${#SPECIFIC_PACKAGES[@]} -gt 0 ]]; then
   SPECIFIC_MODE=true
+  # A targeted run is still a branch update: include every sibling watching
+  # the same branch, otherwise the lockstep check never sees the omitted one.
+  declare -A selected=() selected_branches=()
+  for package in "${SPECIFIC_PACKAGES[@]}"; do
+    selected["$package"]=1
+    key=$(branch_watch_key "$PKGBUILDS_DIR/$package" || true)
+    [[ -z "$key" ]] || selected_branches["$key"]=1
+  done
+  for package_dir in "$PKGBUILDS_DIR"/*; do
+    [[ -f "$package_dir/PKGBUILD" ]] || continue
+    package=${package_dir##*/}
+    [[ -z "${selected[$package]:-}" ]] || continue
+    key=$(branch_watch_key "$package_dir" || true)
+    if [[ -n "$key" && -n "${selected_branches[$key]:-}" ]]; then
+      SPECIFIC_PACKAGES+=("$package")
+    fi
+  done
   for package in "${SPECIFIC_PACKAGES[@]}"; do
     sync_in_lane "$package"
   done

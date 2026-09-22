@@ -39,6 +39,16 @@ jobs:
       contents: read
 
     steps:
+      - name: Require the bot App
+        env:
+          PKGS_BOT_APP_ID: ${{ secrets.PKGS_BOT_APP_ID }}
+          PKGS_BOT_PRIVATE_KEY: ${{ secrets.PKGS_BOT_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$PKGS_BOT_APP_ID" || -z "$PKGS_BOT_PRIVATE_KEY" ]]; then
+            echo "::error::Set PKGS_BOT_APP_ID and PKGS_BOT_PRIVATE_KEY for a GitHub App installed on this repository with Contents: write and Pull requests: write."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -93,19 +103,6 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # No fallback to GITHUB_TOKEN here: a PR it opened would sit with its
-      # checks held, and an auto-merge it enabled would land without running
-      # publish.yml. Better to fail loudly than to pin quietly.
-      - name: Require the bot App
-        if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' }}
-        env:
-          PKGS_BOT_APP_ID: ${{ secrets.PKGS_BOT_APP_ID }}
-        run: |
-          if [[ -z "$PKGS_BOT_APP_ID" ]]; then
-            echo "::error::PKGS_BOT_APP_ID / PKGS_BOT_PRIVATE_KEY are not set. Create a GitHub App with Contents: write and Pull requests: write, install it on this repository, and store its id and private key as those secrets."
-            exit 1
-          fi
-
       - name: Mint the bot token
         if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' }}
         id: app
@@ -126,7 +123,7 @@ jobs:
           echo "title=Track upstream branches: ${title}" >> "$GITHUB_OUTPUT"
 
       - name: Open or update the tracking PR
-        if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' }}
+        if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' && steps.app.outcome == 'success' }}
         id: pr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
@@ -136,8 +133,8 @@ jobs:
           body: |
             Automated pin of packages that follow a moving upstream branch
             (`"auto_merge": true` in `.omarchy/package.json`). Each package's
-            `_commit` now points at the branch tip that has been there for at
-            least its `min_release_age`.
+            `_commit` now points at the branch tip. Fresh tips wait until
+            their commit timestamp is at least `min_release_age` old.
 
             This PR auto-merges once the build checks pass. A failing build
             leaves it open; the next tracker run replaces it with the newer tip.
@@ -159,10 +156,7 @@ jobs:
             echo "auto-merge already enabled on #$PR"
             exit 0
           fi
-          # A PR whose checks all reused existing artifacts can be clean
-          # before this step runs; GitHub then refuses --auto, so merge it.
-          gh pr merge --auto --merge "$PR" -R "${{ github.repository }}" \
-            || gh pr merge --merge "$PR" -R "${{ github.repository }}"
+          gh pr merge --auto --merge "$PR" -R "${{ github.repository }}"
 
       - name: Notify Basecamp on failure
         if: failure() && env.BASECAMP_CHATBOT_URL != ''

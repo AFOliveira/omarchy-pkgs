@@ -232,19 +232,94 @@ b2sums=('old' 'local-b2')
         with self.redirect_clone(repo), self.assertRaisesRegex(ValueError, 'no tag'):
             w.git_branch_tip('https://example.test/tool.git', 'main', r'release-(?P<version>[0-9.]+)', self.root / 'other-cache')
 
-    def test_git_branch_min_age_selects_the_newest_settled_commit(self):
+    def test_git_branch_min_age_holds_the_tip_instead_of_selecting_history(self):
         repo, shas = self.branch_fixture(fresh_tip=True)
-        with self.redirect_clone(repo):
-            tip = w.git_branch_tip('https://example.test/tool.git', 'main', None, self.fetch.cache)
-            settled = w.git_branch_tip('https://example.test/tool.git', 'main', r'v(?P<version>[0-9.]+)', self.fetch.cache, min_age=3600)
-            nothing = w.git_branch_tip('https://example.test/tool.git', 'main', None, self.fetch.cache, min_age=10 ** 9)
-        self.assertEqual(tip['commit'], shas[-1], 'no window: the fresh tip')
-        self.assertEqual((settled['commit'], settled['distance'], settled['count']), (shas[-2], '2', '5'), 'one hour window: the commit before it')
-        self.assertIsNone(nothing, 'a window older than every commit selects nothing')
         watch = {'git_branch': 'https://example.test/tool.git', 'branch': 'main'}
         with self.redirect_clone(repo):
-            self.assertEqual(w.discover(watch, self.fetch, min_age=10 ** 9), [])
-            self.assertEqual(w.discover(watch, self.fetch, min_age=3600)[0]['values']['commit'], shas[-2])
+            releases = w.discover(watch, self.fetch)
+        self.assertEqual(w.select_release(releases)['values']['commit'], shas[-1])
+        self.assertIsNone(w.select_release(releases, min_age=3600))
+        self.assertEqual(w.select_release(releases, min_age=3600, bypass=True)['values']['commit'], shas[-1])
+
+    def branch_sync_fixture(self):
+        repo, shas = self.branch_fixture()
+        for directory in ['bin', 'helpers']:
+            shutil.copytree(ROOT / directory, self.root / directory)
+        for name in ['dev', 'settings-dev']:
+            package = self.root / 'pkgbuilds' / name
+            (package / '.omarchy').mkdir(parents=True)
+            (package / '.omarchy/package.json').write_text(json.dumps({
+                'source': 'local', 'auto_merge': True, 'upstream': {'watch': {
+                    'git_branch': 'https://example.test/tool.git', 'branch': 'main',
+                    'tag_pattern': r'v(?P<version>[0-9.]+)',
+                    'version': '{version}.r{count}.g{commit:.7}',
+                    'variables': {'_commit': '{commit}'}}}}))
+            (package / 'PKGBUILD').write_text(f'''pkgname={name}
+pkgver=1.0.0
+pkgrel=1
+_commit={shas[1]}
+arch=('any')
+source=("tool::git+https://example.test/tool.git#commit=${{_commit}}")
+sha256sums=('old')
+''')
+        stub = self.root / 'stub'
+        stub.mkdir()
+        git = stub / 'git'
+        git.write_text('''#!/usr/bin/env python3
+import os, sys
+args = [os.environ['BRANCH_FIXTURE'] if arg == 'https://example.test/tool.git' else arg for arg in sys.argv[1:]]
+os.execv(os.environ['REAL_GIT'], ['git', *args])
+''')
+        git.chmod(0o755)
+        env = {**os.environ, 'PATH': str(stub) + os.pathsep + os.environ['PATH'],
+               'BRANCH_FIXTURE': f'file://{repo}', 'REAL_GIT': shutil.which('git')}
+        def sync(*args):
+            return subprocess.run([str(self.root / 'bin/sync-upstream'), *args],
+                                  env=env, text=True, capture_output=True)
+        return self.root / 'pkgbuilds', shas[-1], sync
+
+    def test_targeted_branch_sync_updates_siblings_and_then_noops(self):
+        packages, tip, sync = self.branch_sync_fixture()
+        result = sync('--lane', 'auto-merge', 'dev')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for package in packages.iterdir():
+            recipe = w.read_recipe(package / 'PKGBUILD')
+            self.assertEqual(w.scalar(recipe, '_commit'), tip)
+            self.assertEqual(w.scalar(recipe, 'pkgver'), f'1.1.0.r5.g{tip[:7]}')
+            self.assertRegex(recipe['sha256sums'][0], r'^[0-9a-f]{64}$')
+        self.assertIn('Updated: 2', result.stdout)
+        result = sync('--lane', 'auto-merge', 'dev')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('Updated: 0', result.stdout)
+
+    def test_branch_sync_rolls_back_when_a_sibling_fails(self):
+        packages, tip, sync = self.branch_sync_fixture()
+        broken = packages / 'settings-dev/PKGBUILD'
+        broken.write_text(broken.read_text().replace("sha256sums=('old')", 'sha256sums=()'))
+        before = {p: p.read_bytes() for p in packages.glob('*/PKGBUILD')}
+        result = sync('--lane', 'auto-merge', 'dev')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('Lockstep violation', result.stdout + result.stderr)
+        self.assertIn('Updated: 0', result.stdout)
+        self.assertEqual(before, {p: p.read_bytes() for p in before})
+
+    def test_reviewed_lane_leaves_auto_merge_packages_untouched(self):
+        packages, tip, sync = self.branch_sync_fixture()
+        before = {p: p.read_bytes() for p in packages.glob('*/PKGBUILD')}
+        result = sync('--lane', 'reviewed')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('Updated: 0', result.stdout)
+        self.assertEqual(before, {p: p.read_bytes() for p in before})
+
+    def test_different_lanes_cannot_split_a_branch_pair(self):
+        packages, tip, sync = self.branch_sync_fixture()
+        metadata = packages / 'settings-dev/.omarchy/package.json'
+        metadata.write_text(metadata.read_text().replace('"auto_merge": true', '"auto_merge": false'))
+        before = {p: p.read_bytes() for p in packages.glob('*/PKGBUILD')}
+        result = sync('--lane', 'auto-merge', 'dev')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('Lockstep violation', result.stdout + result.stderr)
+        self.assertEqual(before, {p: p.read_bytes() for p in before})
 
     def test_git_branch_tag_template_requires_tag_pattern(self):
         base = {'git_branch': 'https://example.test/tool.git', 'branch': 'main'}
