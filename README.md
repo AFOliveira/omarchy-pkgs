@@ -893,13 +893,13 @@ The repository includes GitHub workflows and systemd services for automated rele
 2. **sync-rebuilds.yml** (Every 6 hours): Bumps pkgrel for packages whose `rebuild_on` dependencies have moved in the official repositories and opens a PR.
 3. **track-branches.yml** (Every 2 hours): The unattended lane. Pins every `"auto_merge": true` package to the tip of its watched branch once its commit timestamp clears `min_release_age`, opens one PR for all of them, and enables auto-merge. Packages pinned from the same branch move together or not at all, including targeted syncs. The PR builds like any other; a tip that fails to build stays an open red PR until the next tick supersedes it.
 
-The tracking PR is opened with a GitHub App token (`PKGS_BOT_APP_ID` and
-`PKGS_BOT_PRIVATE_KEY` secrets; the App needs Contents and Pull requests
-write on this repository). A PR opened with the workflow's own `GITHUB_TOKEN`
-has its build and test runs held until a maintainer approves them, and an
-auto-merge it enabled would land without running the publish workflow. The
-tracker requires both App secrets before it runs. The reviewed sync workflows
-continue to use `GITHUB_TOKEN` and require maintainer approval as before.
+The tracking PR and auto-merge use the PAT stored in `PKGS_BOT_TOKEN`, with
+Contents and Pull requests write access to this repository and an owner trusted
+to trigger builds. The existing controller PAT can be reused. No GitHub App is
+required. The built-in Actions `GITHUB_TOKEN` cannot drive the unattended
+build-and-publish chain, so the tracker requires this secret before it runs.
+The reviewed sync workflows continue to use `GITHUB_TOKEN` and require
+maintainer approval as before. See [setup instructions](docs/upstream-sources.md#enable-unattended-branch-updates).
 
 To approve builds for an unvouched contributor's PR, apply **`build-approved`**.
 Until approval, the PR shows **Awaiting build approval** and its required

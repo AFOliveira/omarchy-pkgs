@@ -9,11 +9,10 @@ name: Track upstream branches
 # and the merge publishes the artifacts. A tip that fails to build stays an
 # unmerged red PR that the next tick supersedes.
 #
-# The PR is opened with a GitHub App token, not GITHUB_TOKEN: a pull request
-# created with the workflow token gets its CI runs held for manual approval,
-# and an auto-merge it enabled would not fire the publish workflow. The App
-# needs Contents: write and Pull requests: write on this repository; its id
-# and private key live in the PKGS_BOT_APP_ID / PKGS_BOT_PRIVATE_KEY secrets.
+# The PR and auto-merge use the PAT in PKGS_BOT_TOKEN so they trigger the
+# build and publish workflows. The built-in GITHUB_TOKEN cannot drive this
+# unattended chain. The PAT needs Contents: write and Pull requests: write
+# on this repository, and its owner must be trusted by the build workflow.
 
 on:
   schedule:
@@ -39,13 +38,12 @@ jobs:
       contents: read
 
     steps:
-      - name: Require the bot App
+      - name: Require the tracking token
         env:
-          PKGS_BOT_APP_ID: ${{ secrets.PKGS_BOT_APP_ID }}
-          PKGS_BOT_PRIVATE_KEY: ${{ secrets.PKGS_BOT_PRIVATE_KEY }}
+          PKGS_BOT_TOKEN: ${{ secrets.PKGS_BOT_TOKEN }}
         run: |
-          if [[ -z "$PKGS_BOT_APP_ID" || -z "$PKGS_BOT_PRIVATE_KEY" ]]; then
-            echo "::error::Set PKGS_BOT_APP_ID and PKGS_BOT_PRIVATE_KEY for a GitHub App installed on this repository with Contents: write and Pull requests: write."
+          if [[ -z "$PKGS_BOT_TOKEN" ]]; then
+            echo "::error::Set PKGS_BOT_TOKEN to a PAT with Contents: write and Pull requests: write on this repository, owned by an account trusted to trigger builds."
             exit 1
           fi
 
@@ -103,14 +101,6 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Mint the bot token
-        if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' }}
-        id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.PKGS_BOT_APP_ID }}
-          private-key: ${{ secrets.PKGS_BOT_PRIVATE_KEY }}
-
       # The PR title names what moved, so the merged history reads like a
       # changelog: "Track upstream branches: omarchy-dev 4.0.0.r6520.g1a2b3c4, ...".
       - name: Describe the pins
@@ -123,11 +113,11 @@ jobs:
           echo "title=Track upstream branches: ${title}" >> "$GITHUB_OUTPUT"
 
       - name: Open or update the tracking PR
-        if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' && steps.app.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.changes.outputs.has_changes == 'true' }}
         id: pr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          token: ${{ steps.app.outputs.token }}
+          token: ${{ secrets.PKGS_BOT_TOKEN }}
           commit-message: ${{ steps.describe.outputs.title }}
           title: ${{ steps.describe.outputs.title }}
           body: |
@@ -148,7 +138,7 @@ jobs:
       - name: Enable auto-merge
         if: ${{ !cancelled() && steps.pr.outputs.pull-request-number != '' }}
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ secrets.PKGS_BOT_TOKEN }}
           PR: ${{ steps.pr.outputs.pull-request-number }}
         run: |
           # Idempotent across re-runs of an updated PR: enabling twice errors.
