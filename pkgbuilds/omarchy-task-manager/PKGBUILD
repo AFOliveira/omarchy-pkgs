@@ -1,7 +1,7 @@
 # Canonical recipe. scripts/package-source.sh fills the release source checksum.
 # Maintainer: Tom Ballard (tcballard)
 pkgname=omarchy-task-manager
-pkgver=0.0.4
+pkgver=0.0.5
 pkgrel=1
 url='https://github.com/tcballard/omarchy-task-manager'
 pkgdesc='Floating native task manager for Omarchy (preview)'
@@ -12,7 +12,7 @@ optdepends=('gdb: live process core dumps' 'nvidia-utils: NVIDIA device telemetr
 makedepends=('cmake' 'ninja' 'rust' 'cargo')
 checkdepends=('python' 'desktop-file-utils')
 source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
-sha256sums=('4759054e2396993886bf2f0abcc74ddf3d5c3499274d69d6fc5f51521a84354a')
+sha256sums=('f2ae4dd058883fdaa7d159364e2a533761c7acd9cd1380b5f1b39e291815247f')
 
 build() {
   cmake -S "$srcdir/$pkgname-$pkgver" -B build -G Ninja \
