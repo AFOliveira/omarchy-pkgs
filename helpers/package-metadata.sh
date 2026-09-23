@@ -191,6 +191,18 @@ package_supports_arch() {
   esac
 }
 
+# The channel DB indexes only its newest version, but older published archives
+# remain immutable. Both the scheduler and build planner must skip an existing
+# filename even when the checkout differs from the version currently indexed.
+package_version_is_published() {
+  local repo_dir="$1" package="$2" version="$3" target="$4" path
+  for path in "$repo_dir/$package-$version-$target.pkg.tar."* \
+              "$repo_dir/$package-$version-any.pkg.tar."*; do
+    [[ -f "$path" && "$path" != *.sig ]] && return 0
+  done
+  return 1
+}
+
 # Channel membership: where a package may be published. Packages without a
 # `channels` key are members of every channel (they flow edge -> rc -> stable).
 package_has_channels() {
