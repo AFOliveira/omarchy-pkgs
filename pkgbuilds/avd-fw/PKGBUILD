@@ -5,9 +5,9 @@ pkgname=avd-fw
 pkgver=0.1
 pkgrel=1
 pkgdesc='Open replacement firmware for the Apple Video Decoder (AVD) on Apple Silicon'
-# The images are raw Cortex-M3 firmware, identical whatever host builds them,
-# so this is an 'any' package (as linux-firmware is) rather than an aarch64 one.
-arch=('any')
+# This recipe uses the native ARM linker and serves Apple Silicon systems.
+# Restrict both builds and publication to aarch64.
+arch=('aarch64')
 url='https://github.com/AsahiLinux/avd-fw'
 license=('MIT')
 # clang cross-compiles to arm-none-eabi out of the box, so no arm-none-eabi

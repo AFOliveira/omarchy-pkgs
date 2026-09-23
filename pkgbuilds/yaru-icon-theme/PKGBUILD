@@ -11,7 +11,7 @@ pkgname=('yaru-sound-theme'
          'yaru-icon-theme'
          'yaru-session')
 pkgver=26.10.3
-pkgrel=1
+pkgrel=2
 pkgdesc="Yaru default ubuntu theme"
 arch=(any)
 url="https://github.com/ubuntu/yaru"
@@ -56,7 +56,8 @@ _delete_all_from_pkgdir_except() {
         rm -r "${pkgdir}"/usr/share/icons
     fi
     if [[ "$1" != "session" ]]; then
-        rm -r "${pkgdir}"/usr/share/{glib-2.0,xsessions,wayland-sessions}
+        # Newer Yaru releases no longer install the X11 session directory.
+        rm -rf "${pkgdir}"/usr/share/{glib-2.0,xsessions,wayland-sessions}
         rm -r "${pkgdir}"/usr/share/gnome-shell/{extensions,modes}
     fi
     # Delete remaining empty directories:
