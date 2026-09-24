@@ -4,10 +4,8 @@ This aarch64-only split recipe provides qemu-user-static and qemu-user-static-bi
 
 ## Updates
 
-The package-local upstream hook checks Debian 13 (trixie), trixie-updates, and trixie-security ARM64 indexes. It compares full Debian versions, including epochs, security revisions and binary rebuilds, and resolves the selected binary through snapshot.debian.org’s API. The immutable content-addressed archive must match the index’s size and SHA256 as well as the snapshot SHA1 before an update is returned.
+Updates are reviewed pins, not automatic. To move to a new Debian 13 revision, update `_debver`, `pkgver` (Debian epoch.upstream.revision), `_snapshot` (the snapshot.debian.org SHA1 of the ARM64 `qemu-user` archive) and `sha256sums_aarch64` together, and confirm both Debian ordering and `vercmp` advance. A one-time Arch epoch of 1 moves away from the previous upstream-only version.
 
-A one-time Arch epoch of 1 moves away from the previous upstream-only version. pkgver encodes Debian epoch.upstream.revision. The hook requires both Debian ordering and pacman vercmp to advance; unfamiliar prerelease conventions or ordering discrepancies fail for manual review. Debian distribution upgrades are explicit recipe changes, not automatic jumps to testing/unstable.
+## binfmt rules
 
-The existing six-hour upstream update PR workflow discovers the hook. Its pkgver, _debver, _snapshot and ARM checksum are applied atomically through the normal sync interface. Repeated checks are idempotent. Feed failures, malformed metadata, conflicting checksums and unavailable/corrupt snapshots fail visibly before recipe mutation. No update installs packages or registers binfmt rules.
-
-Offline fixtures cover version/epoch/security/binNMU updates, security-feed selection, unchanged versions, metadata and snapshot failures, atomic application, and hostile/missing scalar rejection. Existing GUI-independent VM qualification and packaging evidence are recorded in the PR; new binaries still receive build and runtime checks before publication.
+The rules are generated with `--ignore-family yes`, so 32-bit ARM binaries are registered even though the script groups them with aarch64; Apple Silicon has no AArch32 execution. Native aarch64 stays excluded. Rules use the persistent and preserve-argv0 flags and never the credential flag.

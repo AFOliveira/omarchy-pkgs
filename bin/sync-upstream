@@ -31,10 +31,7 @@ pkgbuilds/<package>/.omarchy/upstream.sh, a hook that reports JSON on stdout:
   }
 
 Architecture keys become sha256sums_<arch> in the PKGBUILD; the key "any" means
-the unsuffixed sha256sums array. An empty object ({}) reports no update. Optional "variables" maps existing
-underscore-prefixed release scalars to values containing only letters, digits,
-periods, underscores, plus, colon and hyphen. They are verified and written in
-the same atomic replacement as pkgver and checksums.
+the unsuffixed sha256sums array. An empty object ({}) reports no update.
 
 When the reported version is newer than the checked-in one, pkgver and the
 listed checksum arrays are rewritten and pkgrel is reset to 1.
@@ -212,10 +209,6 @@ validate_release() {
     and (.sha256sums | to_entries | all(
       .value | type == "array" and length > 0 and all(test("\\A[0-9a-f]{64}\\z"))
     ))
-    and (if has("variables") then (.variables | type == "object" and (to_entries | all(
-      (.key | test("\\A_[a-z][a-z0-9_]*\\z")) and
-      (.value | type == "string" and test("\\A[A-Za-z0-9._+:-]+\\z"))
-    ))) else true end)
     and (if has("published_at") then (.published_at | type == "string" and length > 0) else true end)
   ' <<<"$release" >/dev/null
 }
@@ -318,13 +311,6 @@ apply_release() {
 
     set_pkgbuild_scalar "$scratch" pkgver "$pkgver" || exit 1
     set_pkgbuild_scalar "$scratch" pkgrel 1 || exit 1
-
-    local field value
-    while IFS=$'\t' read -r field value; do
-      [[ -n "$field" ]] || continue
-      set_pkgbuild_scalar "$scratch" "$field" "$value" || exit 1
-      [[ $(bash -c 'source "$1"; printf "%s" "${!2}"' _ "$scratch" "$field") == "$value" ]] || exit 1
-    done < <(jq -r '(.variables // {}) | to_entries[] | [.key, .value] | @tsv' <<<"$release")
 
     verify_pkgbuild "$scratch" "$release" "$pkgver" "${arrays[@]}" || exit 1
   ); then
