@@ -12,7 +12,7 @@ depends=('dkms')
 source=(${_pkgbase}-${pkgver}.zip::'https://www.motor-comm.com/Cn/Skippower/downloadFile.html?id=1817'
         'patch.diff')
 sha256sums=('877e6953fc6eb47232a74e47b0daf33de0e7f9e9a395d3bc10d500d3c4150af8'
-            'a48de70ede7d530383c26f17b2a292143ec3af5e6024c0f4403b954249f52058')
+            '3bad74e58b248d28212f9af468c0522440b9b96a335930f97595cd9f1a5c7b25')
 
 prepare() {
   cd "$srcdir"
