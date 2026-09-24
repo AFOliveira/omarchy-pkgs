@@ -50,6 +50,7 @@ jobs:
               pacman -Syu --noconfirm git jq python libarchive
               python tests/oma-service-removal.py
               python tests/upstream-watch.py
+              python tests/obsidian-upstream.py
               ./bin/sync-upstream self-test
               ./bin/sync-rebuilds --self-test
               ./bin/omarchy-pkgs self-test
