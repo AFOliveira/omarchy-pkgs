@@ -3,7 +3,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 
-path = Path(__file__).resolve().parents[1] / 'pkgbuilds/obsidian/.omarchy/upstream.py'
+path = Path(__file__).with_name('upstream.py')
 spec = importlib.util.spec_from_file_location('obsidian_upstream', path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
