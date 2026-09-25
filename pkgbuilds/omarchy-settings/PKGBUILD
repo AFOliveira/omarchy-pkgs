@@ -362,6 +362,17 @@ EOF
   install -Dm755 default/systemd/system-sleep/unmount-fuse \
     "$pkgdir/usr/lib/systemd/system-sleep/unmount-fuse"
 
+  # Pacman platform guard: refuses packages tagged for another hardware
+  # platform. It ships here, not in omarchy, so it is resident before the
+  # runtime and any hardware package install; the hook and the script it runs
+  # travel together. Conditional until the pinned source carries them.
+  if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
+    install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
+      "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
+    install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
+      "$pkgdir/usr/share/libalpm/scripts/omarchy-platform-guard"
+  fi
+
   # Branding assets (logos, icons).
   install -Dm644 logo.txt "$pkgdir/usr/share/omarchy/logo.txt"
   install -Dm644 logo.svg "$pkgdir/usr/share/omarchy/logo.svg"
