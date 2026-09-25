@@ -2,8 +2,8 @@
 # with a silent console, no banner, no logo and no boot delay, so the Mac
 # boots straight to the boot menu and the splash without U-Boot's text.
 #
-# Same name as asahi-alarm's, and nothing generic depends on it, so it only
-# ever replaces their build on a Mac that has [asahi-alarm] configured.
+# Same name as asahi-alarm's, and nothing generic depends on it: it is only
+# installed when named, or as an upgrade of an installed uboot-asahi.
 # pacman takes a package from the first repository that carries its name:
 # with [omarchy] ahead of [asahi-alarm] this build is installed and kept even
 # after asahi-alarm moves on; with [asahi-alarm] ahead it is installed only as
