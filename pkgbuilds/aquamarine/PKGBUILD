@@ -44,6 +44,12 @@ prepare() {
 
 build() {
 	cd "$_archive"
+	# cc1plus needs more than 8 MiB of stack for DRM.cpp. GCC raises its own
+	# limit natively, but under QEMU user-mode emulation (the aarch64 builder)
+	# the guest stack is fixed at exec and setrlimit is ignored, so the compiler
+	# segfaults. QEMU reads this at exec; native builds ignore it. The object
+	# code is identical either way.
+	export QEMU_STACK_SIZE=64M
 	cmake -B build \
 		-D CMAKE_INSTALL_PREFIX=/usr \
 		-D CMAKE_BUILD_TYPE=Release
