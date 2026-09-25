@@ -1,0 +1,52 @@
+# Maintainer: Marcelo Alcantara <maralc@gmail.com>
+# Recipe from maralcbr/omarchy-pkgs asahi-quattro pkgbuilds/omarchy-mac-boot
+# (20260921-10 at 0a55baeddecf59687c32b4bd4e1dee743605c183); the payload now
+# builds from packages/omarchy-mac/boot in omacom/omarchy-mac.
+
+pkgname=omarchy-mac-boot
+# pkgver is the UTC commit date of _commit, so it sorts above the fork's
+# 20260921-N. Reset pkgrel to 1 when pkgver changes; bump it to re-pin or
+# rebuild on the same day.
+pkgver=20260925
+pkgrel=1
+pkgdesc='Apple Silicon boot support for Omarchy: initramfs, in-place encryption, first boot and Limine activation'
+arch=('aarch64')
+url='https://github.com/omacom/omarchy-mac'
+license=('MIT')
+makedepends=('git')
+provides=('omarchy-apple-boot' 'omarchy-first-boot')
+conflicts=('omarchy-apple-boot' 'omarchy-first-boot')
+replaces=('omarchy-apple-boot' 'omarchy-first-boot')
+install=omarchy-mac-boot.install
+# An exact omarchy-mac commit, never a branch.
+_commit=1855e11294c7bb82f5832822a7a1185b23ff8492
+source=("omarchy-mac::git+https://github.com/omacom/omarchy-mac.git#commit=${_commit}")
+sha256sums=('e16c9765bf0f8a8f230021850d503e11edd4579857e9239c464f4f50d1104d0a')
+
+prepare() {
+  # Tests and staging must not be able to read the surrounding desktop source.
+  rm -rf "$srcdir/boot"
+  cp -a "$srcdir/omarchy-mac/packages/omarchy-mac/boot" "$srcdir/boot"
+  [[ $(git -C "$srcdir/omarchy-mac" rev-parse HEAD) == "$_commit" ]]
+  [[ $(TZ=UTC0 git -C "$srcdir/omarchy-mac" show -s --format=%cd --date=format-local:%Y%m%d HEAD) == "$pkgver" ]]
+}
+
+check() {
+  "$srcdir/boot/test/all"
+}
+
+package() {
+  # Runtime-only, so the builder stages and tests the payload without the
+  # desktop or a boot chain. 1.39.0-2 is the first limine-mkinitcpio-hook that
+  # leaves a Mac's /boot to mkinitcpio until Limine is activated.
+  depends=('omarchy' 'limine' 'limine-mkinitcpio-hook>=1.39.0-2' 'limine-snapper-sync' 'asahi-scripts'
+           'bash' 'btrfs-progs' 'coreutils' 'cpio' 'cryptsetup' 'diffutils' 'gawk' 'gnupg' 'grep' 'gum'
+           'gzip' 'kbd' 'mkinitcpio' 'sed' 'systemd' 'util-linux')
+
+  "$srcdir/boot/install" "$pkgdir"
+  printf '%s\n' "$_commit" | install -Dm644 /dev/stdin "$pkgdir/usr/share/omarchy-mac/boot-source-revision"
+
+  # Administrator-editable: every /etc path and the initramfs helpers an image
+  # may rewrite.
+  mapfile -t backup < <(cd "$pkgdir" && find etc usr/lib/omarchy/initcpio -type f | sort)
+}
