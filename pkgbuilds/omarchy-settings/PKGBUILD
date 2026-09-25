@@ -365,20 +365,16 @@ EOF
   # Pacman platform guard: refuses packages tagged for another hardware
   # platform. It ships here, not in omarchy, so it is resident before the
   # runtime and any hardware package install; the hook, the script it runs and
-  # the platform detector that script asks all travel together. omarchy leaves
-  # the detector out of its bin/ loop; the share/bin link keeps the Apple
-  # predicate's "detector beside me" lookup and the CLI router working.
-  # Conditional until the pinned source carries them.
-  if [[ -f bin/omarchy-hw-platform ]]; then
-    install -Dm755 bin/omarchy-hw-platform "$pkgdir/usr/bin/omarchy-hw-platform"
-    install -d "$pkgdir/usr/share/omarchy/bin"
-    ln -s /usr/bin/omarchy-hw-platform "$pkgdir/usr/share/omarchy/bin/omarchy-hw-platform"
-  fi
+  # the script's own copy of the platform detector travel together (omarchy
+  # keeps /usr/bin/omarchy-hw-platform). Conditional until the pinned source
+  # carries them.
   if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
     install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
       "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
     install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
       "$pkgdir/usr/share/libalpm/scripts/omarchy-platform-guard"
+    install -Dm755 bin/omarchy-hw-platform \
+      "$pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform"
   fi
 
   # Branding assets (logos, icons).
