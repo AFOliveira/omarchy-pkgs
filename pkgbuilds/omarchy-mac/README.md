@@ -8,7 +8,7 @@ Ported from Scott Jones's recipe in omarchy-mac/omarchy-pkgs-aarch64 (`pkgbuilds
 
 The package is aarch64-only and published to edge only. It widens to rc and stable only after M1 and M2 cold-boot qualification. It depends on the generic `omarchy` package and has no `provides`, so nothing generic can pull it onto non-Apple aarch64 machines. It ships no kernel, boot, installer or trust configuration; those belong to `omarchy-mac-boot`.
 
-Installing the package activates nothing. `omarchy-mac-setup-system` and `omarchy-mac-setup-user` enable the Wi-Fi and microphone units, and they exit unless `omarchy-hw-apple-silicon` reports Apple Silicon. Stock Omarchy does not yet ship that detector or call these entrypoints, so on a stock install the package is inert until the platform detector and profile work lands.
+Installing the package enables no services, but its vendor configuration applies on the next service start or module load: the iwd Wi-Fi backend for NetworkManager, the `appledrm` notch option and the WirePlumber headset microphone policy. `omarchy-mac-setup-system` and `omarchy-mac-setup-user` enable the Wi-Fi resume and microphone units, and they exit unless `omarchy-hw-apple-silicon` reports Apple Silicon. Stock Omarchy does not yet ship that detector or call these entrypoints, so on a stock install the units stay disabled until the platform detector and profile work lands.
 
 Runtime dependencies are declared in `package()`, so the builder stages and tests the add-on without installing the desktop.
 
