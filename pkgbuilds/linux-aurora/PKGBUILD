@@ -91,7 +91,6 @@ _package_kernel() {
   # No generic linux provide: on a shared aarch64 repository it would compete
   # with linux-aarch64 for any dependency on linux.
   provides=(WIREGUARD-MODULE linux-asahi=${pkgver})
-  replaces=(wireguard-arch)
   conflicts=(linux-asahi)
 
   local kernver="$(<$O/version)"
