@@ -5,7 +5,6 @@
 # re-read a connector's possible CRTCs when rescanning, so a Type-C port the
 # DCP fabric reroutes to another display pipeline gets a CRTC without
 # restarting the compositor. Drop the carry once hyprwm releases the fix.
-# Hyprland is rebuilt whenever this package changes (its rebuild_on).
 
 pkgname=aquamarine
 pkgver=0.15.1
