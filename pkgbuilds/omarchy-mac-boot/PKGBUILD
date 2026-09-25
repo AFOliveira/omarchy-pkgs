@@ -11,6 +11,7 @@ pkgver=20260925
 pkgrel=1
 pkgdesc='Apple Silicon boot support for Omarchy: initramfs, in-place encryption, first boot and Limine activation'
 arch=('aarch64')
+groups=('omarchy-platform-apple-silicon')
 url='https://github.com/omacom/omarchy-mac'
 license=('MIT')
 makedepends=('git')
@@ -19,9 +20,9 @@ conflicts=('omarchy-apple-boot' 'omarchy-first-boot')
 replaces=('omarchy-apple-boot' 'omarchy-first-boot')
 install=omarchy-mac-boot.install
 # An exact omarchy-mac commit, never a branch.
-_commit=602266c8887cbfe7d995be2d56f241d0c955bccb
+_commit=3a58abb5badf6595567695ad0db1bfe9150093ea
 source=("omarchy-mac::git+https://github.com/omacom/omarchy-mac.git#commit=${_commit}")
-sha256sums=('6d7d3fc59de5178b9acd62b81e3a279f75e099527b8210e5a338b3098c525e9e')
+sha256sums=('c81a3ba25a27ee90092179dd48b98292cdfd04adfefcd4de40379f9b37d2de5b')
 
 prepare() {
   # Tests and staging must not be able to read the surrounding desktop source.

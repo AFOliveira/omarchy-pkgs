@@ -6,7 +6,7 @@ It follows the fork recipe in maralcbr/omarchy-pkgs (`asahi-quattro`, `pkgbuilds
 
 ## Scope
 
-The package is aarch64-only and published to edge only. It widens to rc and stable only after M1 and M2 cold-boot qualification. Its only provides are the retired Apple-only names, and nothing generic depends on it or on them, so nothing generic can pull it onto non-Apple aarch64 machines. Its one Apple-only dependency, `asahi-scripts`, comes from the asahi-alarm repository that only the Apple profile configures.
+The package is aarch64-only and published to edge only. It widens to rc and stable only after M1 and M2 cold-boot qualification. It carries the Apple platform tag, `groups=('omarchy-platform-apple-silicon')`, so omarchy-settings' pacman platform guard keeps it off other machines (omacom/omarchy-mac `docs/platform-guard.md`). Its only provides are the retired Apple-only names, and nothing generic depends on it or on them, so nothing generic can pull it onto non-Apple aarch64 machines. Its one Apple-only dependency, `asahi-scripts`, comes from the asahi-alarm repository that only the Apple profile configures.
 
 It requires `limine-mkinitcpio-hook` 1.39.0-2 or newer: that is the first build whose hooks leave a Mac's `/boot` to mkinitcpio until Limine is activated. With an older hook, Limine's kernel hook replaces mkinitcpio's by name, and this package's `limine-ready` gate stops it on a Mac that still boots GRUB, so a kernel update would never reach `/boot`.
 
