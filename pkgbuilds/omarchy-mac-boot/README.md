@@ -20,6 +20,7 @@ A new pin publishes on merge, so check what the pinned source needs first:
 
 - **Settings baseline.** A pin that includes omacom/omarchy-mac#544 (no `93-omarchy-mac-plymouth.conf`) needs omarchy-settings with the HOOKS baseline (omacom/omarchy-mac#542) published on aarch64, and providing `omarchy-mkinitcpio-hooks-baseline`. Publish that first; otherwise this build cannot be installed.
 - **Update verification.** A pin that includes omacom/omarchy-mac#543 (`/usr/lib/omarchy/mac-boot/update-verify`) must publish before any runtime that carries #543. Otherwise that runtime blocks every update on Macs whose `omarchy-mac-boot` predates it.
+- **Reset and key-slot entrypoints.** A pin that includes omacom/omarchy-mac#552 (`reset-prepare`, `reset-verify`, `reset-commit`, `reset-rollback`) and #553 (`luks-slots`) must publish before any runtime that carries them. That runtime's `omarchy-lifecycle-dispatch` requires them on Apple Silicon, so otherwise factory reset, owner setup and `omarchy-drive-password` fail on Macs whose `omarchy-mac-boot` predates them.
 
 ## Transition
 
