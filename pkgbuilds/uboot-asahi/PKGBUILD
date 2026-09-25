@@ -3,12 +3,14 @@
 # boots straight to the boot menu and the splash without U-Boot's text.
 #
 # Same name as asahi-alarm's, and nothing generic depends on it, so it only
-# ever replaces their build on a Mac that has [asahi-alarm] configured. Keep
-# pkgver and the patch set in step with asahi-alarm's and pkgrel above
-# theirs: once installed, pacman keeps this build over theirs at the same
-# pkgver whichever repository is listed first, and a newer asahi-alarm pkgver
-# wins until this recipe follows it. No epoch, which would outrank every
-# future asahi-alarm release.
+# ever replaces their build on a Mac that has [asahi-alarm] configured.
+# pacman takes a package from the first repository that carries its name:
+# with [omarchy] ahead of [asahi-alarm] this build is installed and kept even
+# after asahi-alarm moves on; with [asahi-alarm] ahead it is installed only as
+# omarchy/uboot-asahi, kept over their build at the same pkgver, and replaced
+# by a newer one. Keep pkgver and the patch set in step with asahi-alarm's and
+# pkgrel above theirs. No epoch, which would outrank every future asahi-alarm
+# release.
 
 pkgname=uboot-asahi
 _ver=2026.07

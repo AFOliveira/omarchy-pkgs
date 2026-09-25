@@ -1,4 +1,5 @@
 {
   "source": "local",
-  "channels": ["edge"]
+  "channels": ["edge"],
+  "sync": false
 }
