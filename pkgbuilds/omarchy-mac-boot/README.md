@@ -20,13 +20,13 @@ A new pin publishes on merge, so check what the pinned source needs first:
 
 - **Settings baseline.** A pin that includes omacom/omarchy-mac#544 (no `93-omarchy-mac-plymouth.conf`) needs omarchy-settings with the HOOKS baseline (omacom/omarchy-mac#542) published on aarch64, and providing `omarchy-mkinitcpio-hooks-baseline`. Publish that first; otherwise this build cannot be installed.
 - **Update verification.** A pin that includes omacom/omarchy-mac#543 (`/usr/lib/omarchy/mac-boot/update-verify`) must publish before any runtime that carries #543. Otherwise that runtime blocks every update on Macs whose `omarchy-mac-boot` predates it.
-- **Reset and key-slot entrypoints.** A pin that includes omacom/omarchy-mac#552 (`reset-prepare`, `reset-verify`, `reset-commit`, `reset-rollback`) and #553 (`luks-slots`) must publish before any runtime that carries them. That runtime's `omarchy-lifecycle-dispatch` requires them on Apple Silicon, so otherwise factory reset, owner setup and `omarchy-drive-password` fail on Macs whose `omarchy-mac-boot` predates them.
+- **Reset and key-slot entrypoints.** A pin that includes omacom/omarchy-mac#552 (`reset-prepare`, `reset-verify`, `reset-commit`, `reset-rollback`) and #553 (`luks-slots`) must publish before any runtime that carries them. That runtime's `omarchy-lifecycle-dispatch` requires them on Apple Silicon, so otherwise factory reset, owner setup and `omarchy-drive-password` on the system disk fail on Macs whose `omarchy-mac-boot` predates them.
 
 ## Transition
 
 - It provides, conflicts with and replaces `omarchy-apple-boot` and `omarchy-first-boot`. The scriptlet moves a pending `omarchy-first-boot` marker to `omarchy-mac-first-boot`, drops the replaced unit's dangling enable link and points at a customised `90-omarchy-asahi.conf.pacsave`.
 - `pkgver` is the UTC commit date of the pin, so any pin from `20260925` on upgrades the fork's `20260921-10` on mx-mac Macs. The files the fork shipped that the source no longer does (the image finalize tools, the upstream ARM repository key and the GRUB snapshot-menu hook) are removed by that upgrade.
-- `backup=` covers every `/etc` path and `/usr/lib/omarchy/initcpio`. It includes `/etc/default/update-m1n1`, which pins update-m1n1's device-tree order to the C locale. On a Mac that already has its own unowned copy, pacman keeps it and installs the shipped one as `.pacnew`.
+- `backup=` covers every `/etc` file and `/usr/lib/omarchy/initcpio`. It includes `/etc/default/update-m1n1`, which pins update-m1n1's device-tree order to the C locale. On a Mac that already has its own unowned copy, pacman keeps it and installs the shipped one as `.pacnew`. The snapshot restore hooks in `/etc/boot/hooks` are symlinks to `/usr/bin/omarchy-mac-snapshot-check`, not files, so they stay out of it.
 
 ## Updates
 

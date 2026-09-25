@@ -56,7 +56,7 @@ package() {
     depends+=('omarchy-mkinitcpio-hooks-baseline')
   printf '%s\n' "$_commit" | install -Dm644 /dev/stdin "$pkgdir/usr/share/omarchy-mac/boot-source-revision"
 
-  # Administrator-editable: every /etc path and the initramfs helpers an image
+  # Administrator-editable: every /etc file and the initramfs helpers an image
   # may rewrite.
   mapfile -t backup < <(cd "$pkgdir" && find etc usr/lib/omarchy/initcpio -type f | sort)
 }
