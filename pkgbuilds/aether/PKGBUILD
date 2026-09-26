@@ -29,6 +29,14 @@ build() {
     -o build/bin/aether .
 }
 
+check() {
+  cd "${srcdir}/aether-${pkgver}"
+  local output status=0
+  output=$(HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 NO_PROXY='' \
+    build/bin/aether upgrade 2>&1) || status=$?
+  [[ $status == 1 && $output == 'Updates are managed by your distribution. Run: omarchy-update' ]]
+}
+
 package() {
   cd "${srcdir}/aether-${pkgver}"
   install -Dm755 build/bin/aether "${pkgdir}/usr/bin/aether"
