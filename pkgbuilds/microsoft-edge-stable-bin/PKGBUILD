@@ -11,7 +11,7 @@ _pkgname=microsoft-edge
 _pkgshortname=msedge
 _channel=stable
 pkgver=154.0.4258.37
-pkgrel=1
+pkgrel=2
 pkgdesc="A browser that combines a minimal design with sophisticated technology to make the web faster, safer, and easier"
 arch=('x86_64')
 url="https://www.microsoftedgeinsider.com/en-us/download"
@@ -29,7 +29,7 @@ optdepends=(
 	'ttf-liberation: fix fonts for some PDFs - CRBug #369991'
 	'xdg-utils'
 	)
-options=(!strip !zipman)
+options=(!strip !zipman !emptydirs)
 source=("https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/${_pkgname}-${_channel}_${pkgver}-1_amd64.deb"
 	"microsoft-edge-stable.sh"
 	"Microsoft Standard Application License Terms - Standalone (free) Use Terms.pdf")
@@ -66,4 +66,9 @@ package() {
 	# License
 	install -Dm644 'Microsoft Standard Application License Terms - Standalone (free) Use Terms.pdf' "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE.pdf"
 	rm "${pkgdir}/opt/microsoft/${_pkgshortname}"/product_logo_*.png
+
+	# Remove the Debian cron job, which installs an apt keyring pacman doesn't track
+	rm -r \
+		"${pkgdir}/etc/cron.daily/" \
+		"${pkgdir}/opt/microsoft/${_pkgshortname}/cron/"
 }
