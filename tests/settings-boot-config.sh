@@ -63,9 +63,10 @@ for path in "${files[@]}"; do
   printf 'fixture for %s\n' "$path" > "$fixture/$path"
 done
 
-# Omarchy's HOOKS line, as its sources ship it.
+fixtures=$BUILD_ROOT/tests/fixtures/settings-boot
+# Omarchy's HOOKS line, as v4.0.4 ships it (omarchy_hooks-v4.0.4.conf).
 omarchy_hooks='base udev plymouth keyboard autodetect microcode modconf kms keymap consolefont block encrypt filesystems fsck btrfs-overlayfs'
-printf 'HOOKS=(%s)\n' "$omarchy_hooks" > "$fixture/etc/mkinitcpio.conf.d/omarchy_hooks.conf"
+cp "$fixtures/omarchy_hooks-v4.0.4.conf" "$fixture/etc/mkinitcpio.conf.d/omarchy_hooks.conf"
 
 for recipe in omarchy-settings omarchy-settings-dev; do
   for target_arch in aarch64 x86_64; do
@@ -95,6 +96,10 @@ for recipe in omarchy-settings omarchy-settings-dev; do
       for template in default.conf limine.conf; do
         cmp "$fixture/default/limine/$template" "$pkgdir/usr/share/omarchy/default/limine/$template"
       done
+      if printf '%s\n' "${backup[@]}" | grep -Fxq etc/mkinitcpio.conf.d/00-omarchy-hooks.conf; then
+        echo 'FAIL: backup names a 00-omarchy-hooks.conf the source does not ship' >&2
+        exit 1
+      fi
       # The installer owns the machine-specific live configuration.
       [[ ! -e $pkgdir/etc/default/limine ]]
       if printf '%s\n' "${backup[@]}" | grep -Fxq 'etc/default/limine'; then
@@ -124,7 +129,8 @@ done
 
 # The aarch64 packages also reach Apple Silicon Macs, whose initramfs needs the
 # asahi hook. Source mkinitcpio.conf and the drop-ins in mkinitcpio's order and
-# compare the resulting HOOKS for each kind of aarch64 install.
+# compare the resulting HOOKS for each kind of aarch64 install. Aurora Macs use
+# omarchy-mac-boot's real 90-94 fragments (omacom/omarchy-mac ff7ce0d4d).
 package_aarch64() {
   local recipe=$1 source_tree=$2 out=$3
   (
@@ -133,15 +139,25 @@ package_aarch64() {
     backup=()
     # shellcheck disable=SC1090 # Exercise the recipe's actual package function.
     source "$BUILD_ROOT/pkgbuilds/$recipe/PKGBUILD"
-    package
+    package || exit 1
+    printf '%s\n' "${backup[@]}" > "$out.backup"
   )
 }
 
+# omacom/omarchy#13362 asks omarchy-hw-platform which machine it is on.
+for platform in apple-silicon qualcomm generic-aarch64; do
+  mkdir -p "$scratch/detector-$platform"
+  printf '#!/bin/sh\necho %s\n' "$platform" > "$scratch/detector-$platform/omarchy-hw-platform"
+  chmod +x "$scratch/detector-$platform/omarchy-hw-platform"
+done
+
+# effective_hooks ROOT [PLATFORM]
 effective_hooks() {
-  local root=$1
+  local root=$1 platform=${2:-}
   (
     LC_ALL=C
-    HOOKS=()
+    [[ -z $platform ]] || PATH=$scratch/detector-$platform:$PATH
+    HOOKS=() MODULES=() FILES=()
     # shellcheck disable=SC1091
     source "$root/mkinitcpio.conf"
     shopt -s nullglob
@@ -153,63 +169,119 @@ effective_hooks() {
   )
 }
 
-# machine NAME MKINITCPIO_HOOKS PACKAGED_ETC [FRAGMENT FRAGMENT_HOOKS]
+# machine NAME MKINITCPIO_HOOKS PACKAGED_ETC [mac-boot]
 machine() {
   local root=$scratch/machines/$1
+  rm -rf "$root"
   mkdir -p "$root/mkinitcpio.conf.d"
   printf 'HOOKS=(%s)\n' "$2" > "$root/mkinitcpio.conf"
-  cp "$3"/*.conf "$root/mkinitcpio.conf.d/"
-  if (($# == 5)); then
-    printf 'HOOKS=(%s)\n' "$5" > "$root/mkinitcpio.conf.d/$4"
-  fi
+  [[ -z $3 ]] || cp "$3"/*.conf "$root/mkinitcpio.conf.d/"
+  [[ ${4:-} != mac-boot ]] || cp "$fixtures"/omarchy-mac-boot/*.conf "$root/mkinitcpio.conf.d/"
   printf '%s\n' "$root"
+}
+
+expect() {
+  local layout=$1 what=$2 got=$3 want=$4
+  [[ $got == "$want" ]] || { echo "FAIL: $layout: $what gets '$got', want '$want'" >&2; exit 1; }
 }
 
 arch_default='base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck'
 snapdragon='base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck'
 legacy_mac='base udev autodetect modconf kms keyboard keymap consolefont block asahi encrypt filesystems fsck'
-aurora_mac='base udev autodetect modconf kms keyboard keymap consolefont block asahi omarchy-vendorfw omarchy-mac-encrypt sd-encrypt filesystems fsck'
 
-check_machines() {
-  local layout=$1 packaged=$2/etc/mkinitcpio.conf.d root
-  rm -rf "$scratch/machines"
-  root=$(machine snapdragon "$snapdragon" "$packaged")
-  [[ $(effective_hooks "$root") == "$omarchy_hooks" ]] ||
-    { echo "FAIL: $layout: Snapdragon gets $(effective_hooks "$root")" >&2; exit 1; }
-  root=$(machine spark "$arch_default" "$packaged")
-  [[ $(effective_hooks "$root") == "$omarchy_hooks" ]] ||
-    { echo "FAIL: $layout: DGX Spark gets $(effective_hooks "$root")" >&2; exit 1; }
-  root=$(machine legacy-mac "$legacy_mac" "$packaged")
-  [[ $(effective_hooks "$root") == "$legacy_mac" ]] ||
-    { echo "FAIL: $layout: a legacy GRUB Mac loses asahi: $(effective_hooks "$root")" >&2; exit 1; }
-  root=$(machine aurora-mac "$arch_default" "$packaged" 92-omarchy-mac-boot.conf "$aurora_mac")
-  [[ $(effective_hooks "$root") == "$aurora_mac" ]] ||
-    { echo "FAIL: $layout: an Aurora Mac loses its hooks: $(effective_hooks "$root")" >&2; exit 1; }
-  echo "PASS: $layout: Snapdragon and the Spark get Omarchy's hooks; Macs keep asahi"
+# Macs must come out exactly as they would without omarchy-settings' drop-ins.
+check_macs() {
+  local layout=$1 packaged=$2 base
+  for base in "$arch_default" "$snapdragon"; do
+    expect "$layout" "an Aurora Mac" \
+      "$(effective_hooks "$(machine aurora "$base" "$packaged" mac-boot)")" \
+      "$(effective_hooks "$(machine aurora-bare "$base" "" mac-boot)")"
+  done
+  expect "$layout" "a legacy GRUB Mac" \
+    "$(effective_hooks "$(machine legacy "$legacy_mac" "$packaged")")" "$legacy_mac"
+  expect "$layout" "a legacy GRUB Mac with the Apple fragments" \
+    "$(effective_hooks "$(machine legacy-boot "$legacy_mac" "$packaged" mac-boot)")" \
+    "$(effective_hooks "$(machine legacy-boot-bare "$legacy_mac" "" mac-boot)")"
 }
 
-check_machines "HOOKS in omarchy_hooks.conf" "$scratch/omarchy-settings-aarch64"
+layout="HOOKS in omarchy_hooks.conf (v4.0.4)"
+packaged=$scratch/omarchy-settings-aarch64/etc/mkinitcpio.conf.d
+expect "$layout" Snapdragon "$(effective_hooks "$(machine snapdragon "$snapdragon" "$packaged")")" "$omarchy_hooks"
+expect "$layout" "the DGX Spark" "$(effective_hooks "$(machine spark "$arch_default" "$packaged")")" "$omarchy_hooks"
+check_macs "$layout" "$packaged"
+echo "PASS: $layout: Snapdragon and the Spark get Omarchy's hooks; Macs keep theirs"
 
-# omacom/omarchy#13362 moves the HOOKS line into 00-omarchy-hooks.conf.
+# omacom/omarchy#13362 decides per platform in 00-omarchy-hooks.conf; the
+# package ships both of its files unchanged.
 split=$scratch/split/omarchy
 mkdir -p "$scratch/split"
 cp -a "$fixture" "$split"
-printf 'HOOKS=(%s)\n' "$omarchy_hooks" > "$split/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf"
-sed -i '/^HOOKS=/d' "$split/etc/mkinitcpio.conf.d/omarchy_hooks.conf"
-package_aarch64 omarchy-settings "$split" "$scratch/split-package" >/dev/null
-grep -Fxq 'if [[ " ${HOOKS[*]:-} " != *" asahi "* ]]; then' \
-  "$scratch/split-package/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf"
-check_machines "HOOKS in 00-omarchy-hooks.conf" "$scratch/split-package"
+cp "$fixtures"/omarchy-13362/*.conf "$split/etc/mkinitcpio.conf.d/"
+# Its 00-omarchy-hooks.conf asks the detector copy the platform guard ships.
+for path in default/libalpm/hooks/00-omarchy-platform-guard.hook \
+  default/libalpm/scripts/omarchy-platform-guard bin/omarchy-hw-platform; do
+  mkdir -p "$(dirname "$split/$path")"
+  printf 'fixture for %s\n' "$path" > "$split/$path"
+done
+for recipe in omarchy-settings omarchy-settings-dev; do
+  package_aarch64 "$recipe" "$split" "$scratch/split-$recipe" >/dev/null
+  for conf in 00-omarchy-hooks.conf omarchy_hooks.conf; do
+    cmp "$fixtures/omarchy-13362/$conf" "$scratch/split-$recipe/etc/mkinitcpio.conf.d/$conf"
+  done
+  grep -Fxq etc/mkinitcpio.conf.d/00-omarchy-hooks.conf "$scratch/split-$recipe.backup"
+  [[ -x $scratch/split-$recipe/usr/share/libalpm/scripts/omarchy-hw-platform ]]
+done
+layout="omacom/omarchy#13362 (00-omarchy-hooks.conf)"
+packaged=$scratch/split-omarchy-settings/etc/mkinitcpio.conf.d
+for platform in "" qualcomm generic-aarch64; do
+  expect "$layout" "Snapdragon (${platform:-no detector})" \
+    "$(effective_hooks "$(machine snapdragon "$snapdragon" "$packaged")" "$platform")" "$omarchy_hooks"
+  expect "$layout" "the DGX Spark (${platform:-no detector})" \
+    "$(effective_hooks "$(machine spark "$arch_default" "$packaged")" "$platform")" "$omarchy_hooks"
+done
+expect "$layout" "a legacy GRUB Mac" \
+  "$(effective_hooks "$(machine legacy "$legacy_mac" "$packaged")" apple-silicon)" "$legacy_mac"
+# An Aurora Mac builds on the systemd baseline and unlocks with sd-encrypt.
+hooks=" $(effective_hooks "$(machine aurora "$arch_default" "$packaged" mac-boot)" apple-silicon) "
+for hook in systemd asahi omarchy-vendorfw omarchy-mac-encrypt sd-encrypt; do
+  [[ $hooks == *" $hook "* ]] || { echo "FAIL: $layout: an Aurora Mac lacks $hook:$hooks" >&2; exit 1; }
+done
+for hook in udev encrypt; do
+  [[ $hooks != *" $hook "* ]] || { echo "FAIL: $layout: an Aurora Mac keeps $hook:$hooks" >&2; exit 1; }
+done
+echo "PASS: $layout: shipped unchanged and backed up; Snapdragon and the Spark get Omarchy's hooks; Macs keep theirs"
 
-sed -i '/^HOOKS=/d' "$split/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf"
-if package_aarch64 omarchy-settings "$split" "$scratch/unguarded-package" 2>/dev/null; then
-  echo 'FAIL: the aarch64 package builds without a HOOKS line to guard' >&2
-  exit 1
-fi
-echo "PASS: the aarch64 package fails to build without a HOOKS line to guard"
+# Sources the recipe cannot make safe for Macs stop the aarch64 build, each
+# with its own reason.
+refuse() {
+  local what=$1 reason=$2 conf=$3 body=$4 bad=$scratch/bad/omarchy
+  rm -rf "$scratch/bad" "$scratch/bad-package"
+  mkdir -p "$scratch/bad"
+  cp -a "$fixture" "$bad"
+  rm -f "$bad"/etc/mkinitcpio.conf.d/{00-omarchy-hooks,omarchy_hooks}.conf
+  [[ -z $conf ]] || printf '%s\n' "$body" > "$bad/etc/mkinitcpio.conf.d/$conf"
+  if package_aarch64 omarchy-settings "$bad" "$scratch/bad-package" 2>"$scratch/bad.err"; then
+    echo "FAIL: the aarch64 package builds with $what" >&2
+    exit 1
+  fi
+  grep -Fq "$reason" "$scratch/bad.err" ||
+    { echo "FAIL: $what stops the build for another reason: $(cat "$scratch/bad.err")" >&2; exit 1; }
+  echo "PASS: the aarch64 package refuses $what"
+}
+unsafe="must keep a Mac's asahi line"
+unguardable="cannot guard this HOOKS= line"
+refuse "no hooks file" "$unsafe" "" ""
+refuse "a hooks file that sets no HOOKS" "$unsafe" omarchy_hooks.conf 'FILES+=(/etc/vconsole.conf)'
+refuse "a HOOKS line with a trailing comment" "$unguardable" omarchy_hooks.conf "HOOKS=($omarchy_hooks) # local"
+refuse "a HOOKS line split over lines" "$unguardable" omarchy_hooks.conf "HOOKS=(base udev"$'\n'"  block encrypt filesystems)"
+refuse "an indented HOOKS that ignores asahi" "$unsafe" 00-omarchy-hooks.conf "if true; then"$'\n'"  HOOKS=($omarchy_hooks)"$'\n'"fi"
+refuse "#13362's hooks without the platform detector" "needs the omarchy-hw-platform copy" \
+  00-omarchy-hooks.conf "$(cat "$fixtures/omarchy-13362/00-omarchy-hooks.conf")"
 
 # Upgrades: pacman replaces an unmodified hooks file, keeps a modified one and
 # leaves the guarded version as .pacnew, and installs it where it was absent.
+# A file restored by hand after the stripped package (as the Spark and Surface
+# owners did) is adopted: it stays in place and the guarded one is .pacnew.
 if ((EUID != 0)) || ! command -v pacman >/dev/null; then
   echo "SKIP: pacman upgrade checks need root"
   exit 0
@@ -264,10 +336,17 @@ pacman_in "$scratch/absent" -U "$stripped"
 pacman_in "$scratch/absent" -U "$new"
 cmp "$guarded" "$scratch/absent/$installed"
 
+pacman_in "$scratch/restored" -U "$stripped"
+mkdir -p "$scratch/restored/etc/mkinitcpio.conf.d"
+cp "$unguarded" "$scratch/restored/$installed"
+pacman_in "$scratch/restored" -U "$new"
+cmp "$unguarded" "$scratch/restored/$installed"
+cmp "$guarded" "$scratch/restored/$installed.pacnew"
+
 # Source what the upgrades installed.
 for upgrade in unchanged absent; do
   etc=$scratch/$upgrade/etc/mkinitcpio.conf.d
-  [[ $(effective_hooks "$(machine "$upgrade-snapdragon" "$snapdragon" "$etc")") == "$omarchy_hooks" ]]
-  [[ $(effective_hooks "$(machine "$upgrade-legacy-mac" "$legacy_mac" "$etc")") == "$legacy_mac" ]]
+  expect "$upgrade upgrade" Snapdragon "$(effective_hooks "$(machine "$upgrade-snapdragon" "$snapdragon" "$etc")")" "$omarchy_hooks"
+  check_macs "$upgrade upgrade" "$etc"
 done
 echo "PASS: pacman upgrades install the guarded hooks file and keep local changes"

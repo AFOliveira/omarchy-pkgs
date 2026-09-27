@@ -140,6 +140,23 @@ prepare() {
   fi
 }
 
+# Print the HOOKS that result from sourcing mkinitcpio drop-ins onto a line.
+_omarchy_settings_hooks_after() {
+  local start=$1
+  shift
+  (
+    # Keep the build host's own tools, such as a platform detector, out of it.
+    PATH=/nonexistent
+    read -ra HOOKS <<<"$start"
+    MODULES=() FILES=()
+    for conf in "$@"; do
+      # shellcheck disable=SC1090
+      source "$conf" || exit 1
+    done
+    echo "${HOOKS[*]}"
+  )
+}
+
 package() {
   cd "$srcdir/omarchy"
 
@@ -211,6 +228,9 @@ package() {
   # stage separately below).
   install -d "$pkgdir/etc"
   cp -a etc/. "$pkgdir/etc/"
+  # omacom/omarchy#13362 moves the HOOKS baseline into its own drop-in.
+  [[ ! -f $pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf ]] ||
+    backup+=('etc/mkinitcpio.conf.d/00-omarchy-hooks.conf')
   if [[ $CARCH == aarch64 ]]; then
     # Keep omarchy_hooks.conf and the Limine entry-tool config: without them a
     # kernel update on an encrypted aarch64 install rebuilds an initramfs with
@@ -221,17 +241,29 @@ package() {
     # Apple Silicon Macs install this package too. Their initramfs needs the
     # asahi hook, which omarchy-mac-boot's 90-94 fragments (Aurora) or
     # mkinitcpio.conf (legacy GRUB Macs) set, and an unconditional HOOKS= here
-    # would replace it. Omarchy's line applies only when the hooks loaded so far
-    # lack asahi. The check reads configuration, not the running machine, so it
-    # also holds when the image is built in a chroot.
-    local hooks_conf guarded=0
+    # would replace it. A source that sets HOOKS outright (v4.0.4) gets its line
+    # wrapped so it applies only when the hooks loaded so far lack asahi; one that
+    # already decides per platform (omacom/omarchy#13362) ships as it is. The
+    # wrapper reads configuration, not the running machine, so it also holds
+    # when the image is built in a chroot.
+    local hooks_conf hooks_confs=()
     for hooks_conf in "$pkgdir"/etc/mkinitcpio.conf.d/{00-omarchy-hooks,omarchy_hooks}.conf; do
-      [[ -f $hooks_conf ]] && grep -q '^HOOKS=(' "$hooks_conf" || continue
-      sed -i 's/^\(HOOKS=(.*)\)$/if [[ " ${HOOKS[*]:-} " != *" asahi "* ]]; then\n  \1\nfi/' "$hooks_conf"
-      guarded=1
+      [[ -f $hooks_conf ]] || continue
+      hooks_confs+=("$hooks_conf")
+      sed -i 's/^\(HOOKS=([^#]*)\)[[:space:]]*$/if [[ " ${HOOKS[*]:-} " != *" asahi "* ]]; then\n  \1\nfi/' "$hooks_conf"
+      if grep -q '^HOOKS=' "$hooks_conf"; then
+        echo "${hooks_conf#"$pkgdir"/}: cannot guard this HOOKS= line for Apple Silicon" >&2
+        return 1
+      fi
     done
-    if (( ! guarded )); then
-      echo "No HOOKS= line to guard for Apple Silicon in etc/mkinitcpio.conf.d" >&2
+    # Whatever the layout, a Mac's asahi line must come through the shipped
+    # files, and a stock line must not: that is where Omarchy's hooks come from.
+    local mac_line='base udev block asahi encrypt filesystems fsck' stock_line='base udev block filesystems fsck'
+    local mac_hooks stock_hooks
+    if ! mac_hooks=$(_omarchy_settings_hooks_after "$mac_line" "${hooks_confs[@]}") ||
+      ! stock_hooks=$(_omarchy_settings_hooks_after "$stock_line" "${hooks_confs[@]}") ||
+      [[ $mac_hooks != "$mac_line" || $stock_hooks == "$stock_line" ]]; then
+      echo "etc/mkinitcpio.conf.d: the aarch64 hooks must keep a Mac's asahi line and set everyone else's" >&2
       return 1
     fi
     # Memory stack: no zram device or zswap on the aarch64 install, and
@@ -383,6 +415,13 @@ EOF
       "$pkgdir/usr/share/libalpm/scripts/omarchy-platform-guard"
     install -Dm755 bin/omarchy-hw-platform \
       "$pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform"
+  fi
+  # 00-omarchy-hooks.conf places a Mac through this detector copy; without it
+  # an Aurora Mac gets the busybox line and its initramfs cannot unlock root.
+  if grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
+    [[ ! -x $pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform ]]; then
+    echo "etc/mkinitcpio.conf.d/00-omarchy-hooks.conf needs the omarchy-hw-platform copy the source does not ship" >&2
+    return 1
   fi
 
   # Branding assets (logos, icons).
