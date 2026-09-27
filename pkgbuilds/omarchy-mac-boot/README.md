@@ -1,6 +1,6 @@
 # omarchy-mac-boot
 
-Apple Silicon boot support for Omarchy: the Mac mkinitcpio drop-ins and initcpio hooks, in-place LUKS conversion in the initramfs, vendor firmware in early boot, first boot of a Mac image, the Limine activation gate and the boot check. The source is `packages/omarchy-mac/boot/` in omacom/omarchy-mac, with its own tests. The recipe pins an exact omarchy-mac commit, copies that directory away from the surrounding desktop tree in `prepare()`, runs its `test/all` in `check()` and stages the package with its `install` script. The recipe itself holds only metadata, `backup=` and the pacman scriptlet.
+Apple Silicon boot support for Omarchy: the Mac mkinitcpio drop-ins and initcpio hooks, in-place LUKS conversion in the initramfs, vendor firmware in early boot, first boot of a Mac image, the Limine activation gate and the boot check. The source is `packages/omarchy-mac/boot/` in omacom/omarchy-mac, with its own tests. The recipe pins an exact omarchy-mac commit, copies that directory away from the surrounding desktop tree in `prepare()` and stages the package from the copy with its `install` script. `check()` runs its `test/all` in the full checkout instead, because some tests compare the payload with the desktop source around it (omacom/omarchy-mac#582 and #598). The recipe itself holds only metadata, `backup=` and the pacman scriptlet.
 
 It follows the fork recipe in maralcbr/omarchy-pkgs (`asahi-quattro`, `pkgbuilds/omarchy-mac-boot` at 20260921-10), which carried the payload as files in the recipe.
 
@@ -21,6 +21,8 @@ A new pin publishes on merge, so check what the pinned source needs first:
 - **Settings baseline.** A pin that includes omacom/omarchy-mac#544 (no `93-omarchy-mac-plymouth.conf`) needs omarchy-settings with the HOOKS baseline (omacom/omarchy-mac#542) published on aarch64, and providing `omarchy-mkinitcpio-hooks-baseline`. Publish that first; otherwise this build cannot be installed.
 - **Update verification.** A pin that includes omacom/omarchy-mac#543 (`/usr/lib/omarchy/mac-boot/update-verify`) must publish before any runtime that carries #543. Otherwise that runtime blocks every update on Macs whose `omarchy-mac-boot` predates it.
 - **Reset and key-slot entrypoints.** A pin that includes omacom/omarchy-mac#552 (`reset-prepare`, `reset-verify`, `reset-commit`, `reset-rollback`) and #553 (`luks-slots`) must publish before any runtime that carries them. That runtime's `omarchy-lifecycle-dispatch` requires them on Apple Silicon, so otherwise factory reset, owner setup and `omarchy-drive-password` on the system disk fail on Macs whose `omarchy-mac-boot` predates them.
+- **Reset first-boot markers.** A pin that includes omacom/omarchy-mac#579 (`reset-prepare` clears the factory root's first-boot state and arms `mac-first-boot/pending`) must publish before any runtime that carries #579's `omarchy-system-factory-reset`, which no longer does that inline. Otherwise a factory reset on a Mac whose `omarchy-mac-boot` predates it leaves the factory root without the Mac's first boot, and so without its package keyring, or with an older image's conversion token. A newer boot package with an older runtime is safe: the steps are idempotent.
+- **Speaker safety owner.** A pin that includes omacom/omarchy-mac#567 no longer presets or enables `speakersafetyd`; `omarchy-mac` owns it from omacom/omarchy-mac#535. Re-pin `omarchy-mac` at or past #535 in the same merge as that pin, or publish it first. Edge `omarchy-mac` 0.1.0-5 (b4a79d83d) predates #535 and ships no preset for it, so with only the boot package re-pinned a `systemctl preset-all` on an edge Mac disables the speaker amps' safety daemon, and an image built from edge fails its image check.
 
 ## Transition
 
@@ -35,3 +37,4 @@ Updates are reviewed pins, never a branch:
 1. Set `_commit` to the full omarchy-mac SHA and `pkgver` to its UTC commit date (`TZ=UTC0 git show -s --format=%cd --date=format-local:%Y%m%d <sha>`); `prepare()` checks both.
 2. Reset `pkgrel` to 1 when `pkgver` changes; bump it for a second pin on the same date or a rebuild.
 3. Refresh `sha256sums` with `makepkg -g`.
+4. Check the pin against [Publish order](#publish-order). Before the first pin that includes omacom/omarchy-mac#567 publishes, `omarchy-mac` must be published at or past #535, or re-pinned in the same pull request.

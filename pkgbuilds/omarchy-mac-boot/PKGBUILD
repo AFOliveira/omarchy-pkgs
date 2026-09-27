@@ -25,15 +25,18 @@ source=("omarchy-mac::git+https://github.com/omacom/omarchy-mac.git#commit=${_co
 sha256sums=('06514d03eef7e8468277ae97c3258bc595f307aa0cf3356d3f71cfb6b0d14fe2')
 
 prepare() {
-  # Tests and staging must not be able to read the surrounding desktop source.
+  # Staging must not be able to read the surrounding desktop source.
   rm -rf "$srcdir/boot"
   cp -a "$srcdir/omarchy-mac/packages/omarchy-mac/boot" "$srcdir/boot"
   [[ $(git -C "$srcdir/omarchy-mac" rev-parse HEAD) == "$_commit" ]]
   [[ $(TZ=UTC0 git -C "$srcdir/omarchy-mac" show -s --format=%cd --date=format-local:%Y%m%d HEAD) == "$pkgver" ]]
 }
 
+# The tests run in the checkout: some compare the payload with the desktop
+# source around it (the HOOKS baseline in etc/, the first-run user units and the
+# default package lists, from omacom/omarchy-mac#582 and #598).
 check() {
-  "$srcdir/boot/test/all"
+  "$srcdir/omarchy-mac/packages/omarchy-mac/boot/test/all"
 }
 
 package() {
