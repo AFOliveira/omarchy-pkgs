@@ -116,6 +116,7 @@ check() {
   # identical and undo walks it back. tmpfs allocates inode numbers from a
   # counter and never reuses one, which is what the test assumes.
   local -a filesystem_tests=(
+    backend::copymanifest::tests::
     backend::menu_actions::tests::
     backend::menudelete::tests::
     backend::redo::tests::
