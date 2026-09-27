@@ -9,8 +9,6 @@ url="https://github.com/omacom/ttfx"
 license=('MIT')
 depends=('gcc-libs' 'glibc')
 makedepends=('cargo')
-# the x86-64 assembly engine; without NASM the build falls back to pure Rust
-makedepends_x86_64=('nasm')
 options=('!debug')
 
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
