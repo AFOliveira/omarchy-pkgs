@@ -123,7 +123,16 @@ check() {
   # observe the child's failed execve (natively it returns EACCES); the
   # spawn "succeeds" with exit 127, the probe reads that as "not owned",
   # and the assertion fails. Passes natively.
-  [[ $CARCH == aarch64 ]] && skip+=(--skip services::update_install::tests::ownership_probe_errors_disable_in_place_updates)
+  # a_missing_working_directory_fails_instead_of_using_stratas_cwd is the
+  # same blind spot: the child's failed chdir never reaches the parent.
+  # in_place_retirement_signals_and_waits_for_an_owned_process finds its
+  # target by /proc/<pid>/exe, which under QEMU user-mode names the
+  # emulator rather than `sleep`, so nothing is signalled.
+  [[ $CARCH == aarch64 ]] && skip+=(
+    --skip services::update_install::tests::ownership_probe_errors_disable_in_place_updates
+    --skip adapters::local_jobs::tests::lifecycle::a_missing_working_directory_fails_instead_of_using_stratas_cwd
+    --skip services::update_install::tests::in_place_retirement_signals_and_waits_for_an_owned_process
+  )
   cargo test --frozen --release --all-targets --all-features \
     -- --test-threads=1 "${skip[@]}"
 }
