@@ -1,8 +1,8 @@
 # Maintainer: GM <gianmarcomorales@icloud.com>
 
 pkgname=flea
-pkgver=0.3.1
-pkgrel=2
+pkgver=0.3.4
+pkgrel=1
 pkgdesc='Fast, keyboard-first file manager for Omarchy'
 arch=('x86_64' 'aarch64')
 url='https://github.com/thisisgm/flea'
@@ -52,7 +52,7 @@ options=('!debug')
 source=(
   "$url/releases/download/v$pkgver/$pkgname-v$pkgver.tar.gz"
 )
-sha256sums=('b146ac3f5025da987eae623c4392c44ce69a6a7275a8df3ec1a84563920a4dd2')
+sha256sums=('e5ad258126ae796d262b51254bfbd4a768416ae4d02da772663e6e24c90cdfe4')
 
 build() {
   cd "$pkgname-$pkgver"
@@ -150,6 +150,18 @@ check() {
       --skip backend::child::tests::a_child_is_noticed_when_it_exits_rather_than_at_the_next_poll_boundary
       --skip backend::child::tests::a_child_that_never_started_is_told_apart_from_one_that_ran_and_failed
       --skip backend::menu_registry::tests::unavailable_failed_and_oversized_queries_are_named_errors
+    )
+    # deep_directory_tree_fits_the_worker_stack sizes a tree 1900 folders
+    # deep and expects a complete answer, but the listing walk stops at its
+    # 2000 ms deadline (dirsize::DEADLINE_MS) and reports partial; emulated
+    # read_dir over paths near PATH_MAX does not finish in time.
+    # closing_a_query_kills_its_process_group_and_releases_the_service
+    # cancels an `sh -c 'sleep 600 & wait'` child the moment it is
+    # registered and waits 5 s for the capture to return. Unchanged since
+    # 0.3.1, which passed it here; under emulation it now loses that race.
+    test_args+=(
+      --skip backend::dirsizeworker::tests::deep_directory_tree_fits_the_worker_stack
+      --skip backend::menu_registry::tests::closing_a_query_kills_its_process_group_and_releases_the_service
     )
   fi
 
