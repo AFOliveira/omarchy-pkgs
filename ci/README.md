@@ -69,8 +69,9 @@ Watch it with `journalctl -u omarchy-controller -f` on the box.
   different bytes under an existing name, accept identical bytes, upload
   packages then signatures then the db.
 - aarch64 under QEMU with credential-preserving binfmt. PR builds now run
-  aarch64 natively on `ubuntu-24.04-arm` (QEMU was up to ~15x slower); publish.yml
-  still builds under QEMU when a merged tree has no PR artifact.
+  aarch64 natively on `ubuntu-24.04-arm` (QEMU was up to ~15x slower). When a
+  merged aarch64 tree has no artifact, publish.yml rebuilds it there too, in its
+  own job, and signs and uploads it on the droplet like a PR artifact.
 - Vouch gate: collaborators, `.github/VOUCHED.td`, or the `build-approved`
   label; denounced authors cannot be overridden by the label.
 - Tests run on PRs only; `result`, `self-tests`, `build-isolation` are the
