@@ -7,6 +7,7 @@ _passwordless_package_transition() (
   # below relies on pathname expansion, so it must not inherit glob state.
   unset GLOBIGNORE
   set +f
+  shopt -u failglob
   [[ -d /run && ! -L /run ]] || return 1
   [[ $(/usr/bin/stat -Lc '%u' /run) == "0" ]] || return 1
   ! (( 8#$(/usr/bin/stat -Lc '%a' /run) & 022 )) || return 1

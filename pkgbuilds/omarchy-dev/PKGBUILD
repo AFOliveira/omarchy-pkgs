@@ -1,7 +1,7 @@
 # Maintainer: Ryan Hughes <ryan@omarchy.org>
 pkgname='omarchy-dev'
 pkgver=4.0.0.r6646.gbf44355
-pkgrel=1
+pkgrel=2
 # Pinned by the upstream watch in .omarchy/package.json (bin/sync-upstream):
 # every quattro tip becomes a commit pin here, so the package is versioned,
 # checksummed and built exactly like a release, just more often. The r-number
@@ -22,7 +22,8 @@ conflicts=('omarchy')
 depends=(
   # Omarchy meta
   'omarchy-keyring'
-  "omarchy-settings-dev=${pkgver}-${pkgrel}"
+  # Keep the source versions together; packaging-only releases may differ.
+  "omarchy-settings-dev=${pkgver}"
 
   # Wayland / Hyprland core
   'hyprland'
