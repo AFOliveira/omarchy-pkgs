@@ -59,6 +59,7 @@ jobs:
               ./tests/partial-release.sh
               ./tests/published-build-plan.sh
               ./tests/settings-boot-config.sh
+              ./tests/pinned-sources.sh
               ./tests/controller.sh
               ./tests/artifact-helpers.sh
               ./tests/limine-mkinitcpio-hook.sh

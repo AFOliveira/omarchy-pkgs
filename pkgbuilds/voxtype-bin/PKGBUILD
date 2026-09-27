@@ -1,6 +1,6 @@
 # Maintainer: Peter Jackson <pete@peteonrails.com>
 pkgname=voxtype-bin
-pkgver=1.0.1
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Push-to-talk voice-to-text for Linux (pre-built binaries)"
 arch=('x86_64' 'aarch64')
@@ -142,82 +142,72 @@ source=(
     "quickshell-voxtype-shared-qmldir-$pkgver::https://raw.githubusercontent.com/peteonrails/voxtype/v$pkgver/quickshell/voxtype-shared/qmldir"
 )
 sha256sums_x86_64=(
-    # Whisper binaries
-    'cb3843a894ef47aca230b30bb1c45c2ef8e0d015adf2fa754d60e55123165fd0'  # voxtype-avx2
-    '21357d39412619e8a3fc473153e6e2a28b219aa02007682737afedd73a08bdbe'  # voxtype-avx2.asc
-    '77d49275ae4c3a6d93671014278b0dabd69ba52e65d2ee6ab3ec1bff0af34d55'  # voxtype-avx512
-    'e3421641b4b5fa5d42ee0698eb43552e177f8b095a1acea32445693404b4fd54'  # voxtype-avx512.asc
-    'c569d038057464aa60290296794bcbd79b928ee0efd038e33062a4c015558ed8'  # voxtype-vulkan
-    'a82bd4108dc70d7d2b6e25a83a6744170502f5110780d4a2e97a3e76047ea60d'  # voxtype-vulkan.asc
-    # ONNX CPU binaries
-    '19b8716ff7bd388ffb18843fc0ee5e614faa84544d22918ecf72a7c3d6c02929'  # voxtype-onnx-avx2
-    '3021aa3a13555bdab0ecccfb522db8391d7e05810d218608a6372477f11cb2af'  # voxtype-onnx-avx2.asc
-    '69a6e6fc1c04a55eeb62cf1eaa5fe81873c70eabffff120ce1a4ff7ef62fd559'  # voxtype-onnx-avx512
-    '305d33b6f4dc8ac7a38a5f522c1af95b462355fa057b2eb39d3add59303145e1'  # voxtype-onnx-avx512.asc
-    # ONNX CUDA 12 binary + companion .so
-    'e7180f17add10bb441368d8495fc99bde0ba1a1978ea5f7a52d7e626779eca16'  # voxtype-onnx-cuda-12
-    '34f7242fe16867ab029af9ed4854d3930aa2ed91bc37e062962edbfc65522af5'  # voxtype-onnx-cuda-12.asc
-    'a8584727d51ba646ac63fc991c2f36ad6cd5b8cc8b1141896e46938700b888d0'  # cuda-12.libonnxruntime_providers_cuda.so
-    '1b028afc079628d76a28d7eb09700a4baead4a27f9634ba82c35398486134114'  # cuda-12.libonnxruntime_providers_shared.so
-    # ONNX CUDA 13 binary + companion .so + dlopen-target libonnxruntime
-    '4de2aac42b67a05c34ac0b23f771fc83968670fd77d14781cbf4483524304cd1'  # voxtype-onnx-cuda-13
-    'adb768be0b115f38bc28ea35614ae59e1c1adfb6e11ae08a252c45d52932fab2'  # voxtype-onnx-cuda-13.asc
-    'b6cb7744d0efd2faced5c83ead374c13e7f2630b5a249ffaf393cdb1e092c92b'  # cuda-13.libonnxruntime_providers_cuda.so
-    'c6a12593396095f5670160e284c35d1700b7708cf3037b7042e2a5200ccae772'  # cuda-13.libonnxruntime_providers_shared.so
-    '1aacefdf0b4afa145d410b2381bbc3db3d978c485fb182c42a2b0b09f91f5310'  # cuda-13.libonnxruntime.so.1.24.4
-    # ONNX MIGraphX binary + companion .so
-    'f7a4cc0deaf35110b5106f1fc1f83dded41c0b1780f9fb5aa9cccc3c62e5eb6a'  # voxtype-onnx-migraphx
-    '9e9c767605923c084c97659326cb0f03ad4e5db0aded4da052fa208b4de9cf45'  # voxtype-onnx-migraphx.asc
-    'ddd67e6193ade819ee21f1706d1b03b9151f1d2d2843701e2d19d8b183631707'  # migraphx.libonnxruntime_providers_migraphx.so
-    '17f7cf47ad0d7b5ac895ae588fd62c7f85a13842588161b6a24c7d480f062be4'  # migraphx.libonnxruntime_providers_shared.so
-    # OSD launcher + GTK4 frontend
-    '7250027b1672507a6d584f795731c87e1d3b5c1de891438bd55e34b136a2d5cc'  # voxtype-osd
-    '1a944200fbac1e773c70d036075745b0e868885443e29c30797f262d44928cc1'  # voxtype-osd.asc
-    '74fb0f6ad87feb0c1c9e06a8b28a7f7ecee101caef4248f77dcf613b5271238e'  # voxtype-osd-gtk4
-    '60224685717fea0582d570160282e9e215cd4713b3bdb695edc7bae8b6860cac'  # voxtype-osd-gtk4.asc
-    # Quickshell OSD launcher + audio-bridge sidecar (new in v0.7.5)
-    'b809c5140e844a6add801d7e592775cd89af8cce73fa399b6a3aec15dfd09533'  # voxtype-osd-quickshell
-    '39412691ab1f8ffe4fa6bf1eb9763c29f94b8892d1ba59fd49dc65dd0d80297a'  # voxtype-osd-quickshell.asc
-    '45776290e364194d83a8b89445166406c278e890507bf07ec52a5f0e8fa57720'  # voxtype-audio-bridge
-    '5be1174a78d70b78fd8d923c88e3406962443b39a1c452eb985b1e2484ef5668'  # voxtype-audio-bridge.asc
+  'e7d5de68cc8fc610c3c961c47f879451db9bee4a2df152e9a66f1078072e7f28'
+  'fdf2c35826ea7590a703993c5bdf69804672a5a0c76312e66bc4f14399d8f2ce'
+  'bb2da45c7676bc128da998da928cb239ab6eef9fe53c31c9b4a77e819e521715'
+  'd6158e18ac2446a2ae79b2ae23ed9744c6579eeabfa567b5c3db0a2575f95ac9'
+  'db2c7938392ff08ec8b50b8afb90f8bd3d0111eccf5943df2f51c40a0368fec2'
+  '2b6b6afbaecd0c8adff536db4c5e0ea50b8781ad6f2643344e96c8cba2ea672a'
+  '07ee9863f1d611ee3fc638f9ba766f3bd38783b9a97b276d7eceb9b995a7167b'
+  'b5e15277f49f52ffd99bb0cc3ef91548841d83ed3787a3ff7809d4fba596327e'
+  'b3fabe0fa67452aaa76ccf3f84cd71a3c23d27354c840128c396690cb3a1c9a6'
+  'b2da321a562d7de459881be305626a1f68942786939c534360757efe686802e7'
+  '171869a953b0d85cb36b54c5cb0c64013051317bff2a1afe09297caf67967d01'
+  '24df2a2e1f1505c5ea3118ad354770f4ff1106a82b63e63fb62f3bf5e07fb448'
+  'a8584727d51ba646ac63fc991c2f36ad6cd5b8cc8b1141896e46938700b888d0'
+  '1b028afc079628d76a28d7eb09700a4baead4a27f9634ba82c35398486134114'
+  '06e74651565ed63ab20e8eedd7380ceb658558125d97dfde2bb5eafeeac82c7d'
+  '050438373390c779967a23ec4acbcd701cf3ac7e6ae9746c4eb06d999a44f810'
+  'b6cb7744d0efd2faced5c83ead374c13e7f2630b5a249ffaf393cdb1e092c92b'
+  'c6a12593396095f5670160e284c35d1700b7708cf3037b7042e2a5200ccae772'
+  '1aacefdf0b4afa145d410b2381bbc3db3d978c485fb182c42a2b0b09f91f5310'
+  '4085f24c336ffb0862f9d1022f9d5acafcc4278a5bcd3fd45e6d89692f71d301'
+  '3c8d3eb1ad6db8881c59b3d25a317ea4bbadedab4388811b085920c21321d654'
+  'ddd67e6193ade819ee21f1706d1b03b9151f1d2d2843701e2d19d8b183631707'
+  '17f7cf47ad0d7b5ac895ae588fd62c7f85a13842588161b6a24c7d480f062be4'
+  '0c9ac447bc236728f355d25b7c500afd464186a4591ccc18f482fcc98b16a928'
+  '5844758469bd89b56c864e4934b783870cf0118b3b06d0fc9af9f3f348f85af6'
+  '19535f63c69748408199f3fbfe2bb2f786f5bf4faa54d5390895eecae4603dc7'
+  '3757b039b9a09c53b54c81e518222a1e44b4e50ba100084c6ab088aea31f7070'
+  'b9dc8eca049f21e2507511700108d57ce5704350e5828418753ef9989f86eb08'
+  '57e6e3c8de2307d17c1c45b498e2c92eec77cdefa818ab28aa0abfcd476e15fc'
+  '36333a15e27d13d9988045179582f0daecadc630e3ec01bb0996ab798cb77487'
+  'cf48b19667ea235460d9e7391a04e57b2bc2b9e361eef380196a2c51693fde81'
 )
 sha256sums_aarch64=(
-    'b5e31a85aaa952d1a78c12b8a16ba5cbdcd92eb31adc7d1a908f3c9d06edd4f1'  # voxtype-cpu
-    '3cd2f3fafca40e394a42b90dac031c67160256898a7f4a52893585b99f8f74bb'  # voxtype-cpu.asc
-    'c3771f3e568629178201990976520f88da6d7599ec2d9e404a137570d6c1e108'  # voxtype-onnx
-    'cd58773349eac0108cdad0efcc78d13f5d7c21623117381afa99b912c397b94a'  # voxtype-onnx.asc
-    'ea910d4fd1fe331d38dbed1c3a639cb7e0c04542919192ff6f74be2139afe3c6'  # voxtype-osd
-    'e079ebdd567e318502b710af95e4987fe13623d65673e21877afe88fe18bda55'  # voxtype-osd.asc
-    '0d2148e0cd32bac538692470edc06aa9a2f5c6a891aaa373f59fbe78c247fae3'  # voxtype-osd-gtk4
-    '0ce841f2caa9a1a7e8294a521bef0bab8823dddacd36fff66012b1127e0c1957'  # voxtype-osd-gtk4.asc
-    '097bd518d5e2eac2c3cbad714b65dd8058c818dcb4d900b9a16e442af7d65b8a'  # voxtype-osd-quickshell
-    'f48b8071f78fde0b2d20072e875a8b8e0d8fab4caf6c8ec91cd8e2aa0b031063'  # voxtype-osd-quickshell.asc
-    '35170ad89fea2874fce0f08758ccc2164892ed643aacae632bcfbc6f10433976'  # voxtype-audio-bridge
-    '787965900647ee9b04c8b65123d04b63e38636bfc671fa3b53360823f886b42c'  # voxtype-audio-bridge.asc
+  '2fcf0945d424a116c1947ea738da1afa9f83abbae66cebb53f06189111a6f392'
+  '13c78d392751957631645c45668dca5b798b648e6cefb5dbb33e25ba80e713bf'
+  '49ecde9a394492c9a34e764911d98258c495ed2f0ced386e6974bccf3f9f164f'
+  '0b5f1e64e16086a68f9ac4f5be06e9c0937bd328eab6f257a2894bbb616a2081'
+  '34d83a7edb73ae2e15dabc0638d39f2c30ddb3af8f2565400ff043ef6558dc2b'
+  '9c86d7e11e60e143e68a398b8b3f25ebeaf3225478e3ceb15f84970df5dd76b4'
+  '4d730a6677342158c1861bfb73f1cb86da05afeb74fdf737134df5c8ad9a1eb1'
+  '00a3bd82bd457b6b43bf832c2342a4ee99bed3eb38c70e8e156052a9a46bc7c6'
+  '365c1b5223329604001fe591398d3c308120048567c7f3171d2602005661d594'
+  '2d0a8b55ba20efbb9c273b03ec042d434d6336fdc8bc822363e8b0f128dfa425'
+  '39c4a186ac8a95f7236cfdd46255207f143f76363a5f758eb127509b163d5172'
+  'f2348ab4b25e19a75f5442355c2ae7e250779814a524f09a41a59237aa495430'
 )
 sha256sums=(
-    # Architecture-independent config and support files
-    'f4b2bccd56b31a6a50e1c0a8b6b72383dc1e636f9ccb8cb070442d58b7314579'  # config/default.toml
-    '531c3658e229619e56bb01659fb81f401767b85e1d6e2acd1ac67ee3414a168c'  # voxtype.service
-    '65c95805d9b03ccc2fadb9d63a03ab79974b00091df8457ee8ef290ec6bd5b12'  # voxtype.bash
-    'e5e63b3c7f48238cf719e4f2ef90c1f9c5c7e8cd25eaebc9f78bdd34b24b6605'  # voxtype.zsh
-    'f720ddd24ee97c105b448323899c36bca7c63d00c2d42c4a3da70c3d157dccbb'  # voxtype.fish
-    '31123c45b4ff9cb5fd9e01083350fea6ccaf14969013fd48e4c95fdf89e6eb4b'  # LICENSE
-    'e5b2ec5da5eafe2ce8f7b84b81a889f2ff496ad6488d56b6b9b32b73d025ed53'  # README.md
-    # Desktop entry + launcher
-    '32144a4a5210092b0aa909f6de7a43ebe8bbf82fa3dfb1f3519787512fdf8e4b'  # voxtype-configure.desktop
-    '044b1f7b52cc610ce57ba624111d882029b0ce4bc3e2c2c360f96d07f69e0e85'  # voxtype-configure-launcher
-    # Quickshell QML tree (new in v0.7.5)
-    'd3d0b0b24a3fc3e252623a6fad898c7d1d147fb8c2e49de90fbf452e95de63ab'  # quickshell/shell.qml
-    '70a611fd4eabde43189aee0619899827de21e36695191648dc36470d4c333de6'  # quickshell/OsdSurface.qml
-    '4d6eef505ec161080ca92ae6a355ca00dcc7bb05d5b190534a1851fcbb726e55'  # quickshell/EnginePicker.qml
-    '54271a8f0e4b52f40505f32801f4c78399ac356ed1e80906ca8a068ecb7ee734'  # quickshell/MeetingControls.qml
-    'aaa011682b92d8e25863a9ea34a469b897bac15ad939292d8144b012fa05b209'  # quickshell/voxtype-shared/Theme.qml
-    '74345f9d8b77de3f1d6d08a759e52506c606e8af3d04a97a5bfe7954d0f64604'  # quickshell/voxtype-shared/StateReader.qml
-    '2ad530f92f13fc7f1100e6f6c9910878c35d911e91dc60feb902c2542b619230'  # quickshell/voxtype-shared/AudioBridge.qml
-    '45180488129f16a0568c217c743ce7e45831acb0cb287346d6da5b2fc097717b'  # quickshell/voxtype-shared/StyleLoader.qml
-    'd5e9a86946dc8dc2afabdcd00d79d973181e51b2e5e8aea2772960aaf1ff2283'  # quickshell/voxtype-shared/RecipeRenderer.qml
-    '41b894baa1487e47db5f9ec4baeea9c02b6a76d3c8198b4700a88e2cb7ec0b62'  # quickshell/voxtype-shared/qmldir
+  'f4b2bccd56b31a6a50e1c0a8b6b72383dc1e636f9ccb8cb070442d58b7314579'
+  '531c3658e229619e56bb01659fb81f401767b85e1d6e2acd1ac67ee3414a168c'
+  '65c95805d9b03ccc2fadb9d63a03ab79974b00091df8457ee8ef290ec6bd5b12'
+  'e5e63b3c7f48238cf719e4f2ef90c1f9c5c7e8cd25eaebc9f78bdd34b24b6605'
+  'f720ddd24ee97c105b448323899c36bca7c63d00c2d42c4a3da70c3d157dccbb'
+  '31123c45b4ff9cb5fd9e01083350fea6ccaf14969013fd48e4c95fdf89e6eb4b'
+  'b06ee68e1305174a4f66876750f62d4048d0ebee48e15ee525961a54115ff80d'
+  '32144a4a5210092b0aa909f6de7a43ebe8bbf82fa3dfb1f3519787512fdf8e4b'
+  '044b1f7b52cc610ce57ba624111d882029b0ce4bc3e2c2c360f96d07f69e0e85'
+  'd3d0b0b24a3fc3e252623a6fad898c7d1d147fb8c2e49de90fbf452e95de63ab'
+  '70a611fd4eabde43189aee0619899827de21e36695191648dc36470d4c333de6'
+  '4d6eef505ec161080ca92ae6a355ca00dcc7bb05d5b190534a1851fcbb726e55'
+  '54271a8f0e4b52f40505f32801f4c78399ac356ed1e80906ca8a068ecb7ee734'
+  'aaa011682b92d8e25863a9ea34a469b897bac15ad939292d8144b012fa05b209'
+  '74345f9d8b77de3f1d6d08a759e52506c606e8af3d04a97a5bfe7954d0f64604'
+  '2ad530f92f13fc7f1100e6f6c9910878c35d911e91dc60feb902c2542b619230'
+  '45180488129f16a0568c217c743ce7e45831acb0cb287346d6da5b2fc097717b'
+  'd5e9a86946dc8dc2afabdcd00d79d973181e51b2e5e8aea2772960aaf1ff2283'
+  '41b894baa1487e47db5f9ec4baeea9c02b6a76d3c8198b4700a88e2cb7ec0b62'
 )
 
 package() {

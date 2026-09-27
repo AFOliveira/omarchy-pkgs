@@ -5,17 +5,18 @@ pkgname=omarchy-mac
 # pkgver matches packages/omarchy-mac/version at _commit. Bump pkgrel to re-pin
 # or rebuild the same add-on version; reset it to 1 when pkgver increases.
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc='Apple Silicon configuration and support services for Omarchy'
 arch=('aarch64')
+groups=('omarchy-platform-apple-silicon')
 url='https://github.com/omacom/omarchy-mac'
 license=('MIT')
 makedepends=('git' 'findutils')
 checkdepends=('diffutils' 'python' 'systemd')
 # An exact quattro-upstream commit, never a branch.
-_commit=b4a79d83d1144c4de90b29a2d8b4090090d7a9d8
+_commit=ff7ce0d4dfaea9e17270b3061e642ee095b7b265
 source=("omarchy-mac::git+https://github.com/omacom/omarchy-mac.git#commit=${_commit}")
-sha256sums=('93676ce29791a29efe3b098fd8d129fa2248cd32d04253d9520a5b4c0697be6f')
+sha256sums=('7530c284cd323d451540205c0a677c4e187070f0b8c4081a2e85f487f2ebb985')
 
 prepare() {
   # Tests and staging must not be able to read the surrounding desktop source.
@@ -33,7 +34,8 @@ package() {
   # Runtime-only: the builder does not need the Omarchy desktop to stage or
   # test the add-on.
   depends=('omarchy' 'bash' 'coreutils' 'diffutils' 'grep' 'sed' 'gawk' 'systemd' 'pciutils' 'kmod'
-           'networkmanager' 'iwd' 'python' 'pipewire' 'pipewire-pulse' 'libpulse' 'wireplumber')
+           'mkinitcpio' 'networkmanager' 'iwd' 'python' 'pipewire' 'pipewire-pulse' 'libpulse' 'wireplumber'
+           'asahi-audio' 'alsa-ucm-conf-asahi' 'rtkit' 'pipewire-alsa')
 
   "$srcdir/addon/install" "$pkgdir"
   install -Dm644 "$srcdir/addon/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
