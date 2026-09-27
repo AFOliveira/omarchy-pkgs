@@ -34,7 +34,8 @@ package() {
   # Runtime-only: the builder does not need the Omarchy desktop to stage or
   # test the add-on.
   depends=('omarchy' 'bash' 'coreutils' 'diffutils' 'grep' 'sed' 'gawk' 'systemd' 'pciutils' 'kmod'
-           'networkmanager' 'iwd' 'python' 'pipewire' 'pipewire-pulse' 'libpulse' 'wireplumber')
+           'mkinitcpio' 'networkmanager' 'iwd' 'python' 'pipewire' 'pipewire-pulse' 'libpulse' 'wireplumber'
+           'asahi-audio' 'alsa-ucm-conf-asahi' 'rtkit' 'pipewire-alsa')
 
   "$srcdir/addon/install" "$pkgdir"
   install -Dm644 "$srcdir/addon/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
