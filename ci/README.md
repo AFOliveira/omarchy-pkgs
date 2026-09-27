@@ -7,8 +7,7 @@ signing on merge exactly as before.
 
 - `.github/workflows/build-pr.yml` — on a PR touching `pkgbuilds/**`, one job
   per changed package on runners labelled `omarchy-builder`. aarch64 jobs
-  run on GitHub's native `ubuntu-24.04-arm` runners instead, except the few
-  heavy packages the workflow keeps on the droplets. Uploads the unsigned
+  run on GitHub's native `ubuntu-24.04-arm` runners instead. Uploads the unsigned
   `.pkg.tar.zst` as a workflow artifact (7 days).
 - `runner-cloud-init.yaml` — Ubuntu 24.04 user-data: docker + buildx, the
   GitHub runner registered `--ephemeral`, runs one job, powers off.
