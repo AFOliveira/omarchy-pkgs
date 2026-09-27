@@ -160,8 +160,8 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.count != '0'
-    # The droplets are x86, so aarch64 there runs under QEMU, about 30x
-    # slower: omarchy-mac-boot's check() took 2h47m of the 180 minutes.
+    # The droplets are x86, so aarch64 there runs under QEMU: omarchy-mac-boot
+    # took 2h47m of the 180 minutes, most of it in check().
     # GitHub's arm64 runners (4 vCPU, 16 GB; ~100 GB disk free in our pilots)
     # build it natively in 11 minutes, and linux-aurora in 30 (72 under QEMU).
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || fromJSON('["self-hosted","omarchy-builder"]') }}
