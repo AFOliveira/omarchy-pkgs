@@ -1,8 +1,9 @@
 name: Build changed packages
 
-# Build every package directory a PR touches, one job per package per arch, on
-# the self-hosted droplet pool. Artifacts are unsigned; publish.yml signs and
-# publishes them on merge.
+# Build every package directory a PR touches, one job per package per arch:
+# x86_64 on the self-hosted droplet pool, aarch64 natively on GitHub's arm64
+# runners. Artifacts are unsigned; publish.yml signs and publishes them on
+# merge.
 #
 # Tooling runs from the base branch; a PR supplies only pkgbuilds/. The
 # vouch gate limits who may spend compute; this limits what their PR can run.
@@ -159,13 +160,18 @@ jobs:
   build:
     needs: changes
     if: needs.changes.outputs.count != '0'
-    runs-on: [self-hosted, omarchy-builder]
+    # The droplets are x86, so aarch64 there runs under QEMU, about 30x
+    # slower: omarchy-mac-boot's check() took 2h47m of the 180 minutes.
+    # aarch64 builds natively on GitHub's arm64 runners (4 vCPU, 16 GB),
+    # except the packages listed here, which stay on the 32-vCPU droplets
+    # until a native build of each has been shown to fit.
+    runs-on: ${{ (matrix.arch == 'aarch64' && !contains(fromJSON('["linux-aurora","strata","obs-studio"]'), matrix.package)) && 'ubuntu-24.04-arm' || fromJSON('["self-hosted","omarchy-builder"]') }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.changes.outputs.matrix) }}
     steps:
-      # Tooling from base: everything that executes on this droplet's host
+      # Tooling from base: everything that executes on this runner's host
       # (bin/, helpers/, build/) comes from the base branch. Only the PR's
       # package directories are overlaid. A PR can therefore change what
       # gets built, never how the runner builds it. A PR that changes both

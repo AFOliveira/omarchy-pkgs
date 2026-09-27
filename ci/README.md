@@ -6,8 +6,10 @@ signing on merge exactly as before.
 ## Pieces
 
 - `.github/workflows/build-pr.yml` — on a PR touching `pkgbuilds/**`, one job
-  per changed package on runners labelled `omarchy-builder`. Uploads the
-  unsigned `.pkg.tar.zst` as a workflow artifact (7 days).
+  per changed package on runners labelled `omarchy-builder`. aarch64 jobs
+  run on GitHub's native `ubuntu-24.04-arm` runners instead, except the few
+  heavy packages the workflow keeps on the droplets. Uploads the unsigned
+  `.pkg.tar.zst` as a workflow artifact (7 days).
 - `runner-cloud-init.yaml` — Ubuntu 24.04 user-data: docker + buildx, the
   GitHub runner registered `--ephemeral`, runs one job, powers off.
 - `controller.sh` — systemd timer every minute on a small always-on droplet.
@@ -67,7 +69,9 @@ Watch it with `journalctl -u omarchy-controller -f` on the box.
 - Publish is incremental and immutable: pull the channel db, refuse
   different bytes under an existing name, accept identical bytes, upload
   packages then signatures then the db.
-- aarch64 under QEMU with credential-preserving binfmt.
+- aarch64 under QEMU with credential-preserving binfmt. PR builds now run
+  aarch64 natively on `ubuntu-24.04-arm` (QEMU was ~30x slower); publish.yml
+  still builds under QEMU when a merged tree has no PR artifact.
 - Vouch gate: collaborators, `.github/VOUCHED.td`, or the `build-approved`
   label; denounced authors cannot be overridden by the label.
 - Tests run on PRs only; `result`, `self-tests`, `build-isolation` are the
