@@ -141,17 +141,22 @@ set_pkgbuild_array() {
 
   local rewritten="$TEMP_DIR/pkgbuild-rewritten"
   if ! awk -v prefix="${name}=(" -v block="$block" '
+    # The code on a line, minus any comment. Checksum arrays hold quoted hex
+    # (or SKIP), so a "#" can only ever start a comment here.
+    function code(s) { sub(/#.*/, "", s); return s }
     !replaced && index($0, prefix) == 1 {
       while ((getline line < block) > 0) print line
       close(block)
       replaced = 1
       # A ")" anywhere past the opening closes the array; testing for one at end
       # of line instead would treat a trailing comment as a continuation and eat
-      # every line up to the next ")".
-      if (index(substr($0, length(prefix) + 1), ")") == 0) skipping = 1
+      # every line up to the next ")". A ")" inside a comment -- "# sidecar
+      # (new in v0.7.5)" -- closes nothing, and ending the skip there would
+      # leave the rest of the old array behind a stray ")".
+      if (index(code(substr($0, length(prefix) + 1)), ")") == 0) skipping = 1
       next
     }
-    skipping { if ($0 ~ /\)/) skipping = 0; next }
+    skipping { if (code($0) ~ /\)/) skipping = 0; next }
     { print }
   ' "$pkgbuild" > "$rewritten"; then
     print_error "Failed to rewrite ${name} in $pkgbuild"
@@ -944,6 +949,29 @@ EOF
   check "npm publication time is preserved" "2024-01-02T03:04:05.000Z" "$(jq -r '.published_at' <<<"$npm_sum")"
   vst=0; validate_package_metadata "$npmpkg" >/dev/null || vst=$?
   check "npm declaration validates" "0" "$vst"
+
+  # A ")" in a comment inside a checksum array must not end the rewrite early;
+  # voxtype-bin annotates its arrays with "(new in v0.7.5)" and the like.
+  echo "Checksum array rewrite across commented lines:"
+  local commented="$TEMP_DIR/commented-pkgbuild" sum_c=$(printf 'c%.0s' {1..64})
+  cat > "$commented" <<'EOF'
+sha256sums_x86_64=(
+    # Binaries
+    'aaaa'  # tool
+    # Sidecar (new in v0.7.5)
+    'bbbb'  # sidecar (x86_64)
+)
+sha256sums=( # support files (arch-independent)
+    'dddd'
+)
+package() { :; }
+EOF
+  set_pkgbuild_array "$commented" sha256sums_x86_64 "$sum_c" "$sum_c"
+  set_pkgbuild_array "$commented" sha256sums "$sum_c"
+  check "commented arrays rewrite to valid shell" "0" \
+    "$(bash -n "$commented" 2>/dev/null; echo $?)"
+  check "commented arrays hold only the new checksums" "$sum_c $sum_c|$sum_c|package" \
+    "$(bash -c 'source "$1"; printf "%s|%s|%s" "${sha256sums_x86_64[*]}" "${sha256sums[*]}" "$(declare -F package)"' _ "$commented")"
 
   # End to end over the real mise-bin package: its checked-in metadata and
   # PKGBUILD, the full sync_package path (selection, validation, backstop,
