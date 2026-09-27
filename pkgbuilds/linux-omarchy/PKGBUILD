@@ -3,7 +3,7 @@
 
 pkgbase=linux-omarchy
 pkgver=7.2.5
-pkgrel=4
+pkgrel=6
 pkgdesc='Omarchy Linux'
 url='https://omarchy.org'
 arch=(
@@ -49,6 +49,7 @@ source=(
   ${_rcpatch:+https://cdn.kernel.org/pub/linux/kernel/v${_major}.x/stable-review/${_rcpatch}.xz}
   ${_rcpatch:+https://cdn.kernel.org/pub/linux/kernel/v${_major}.x/stable-review/${_rcpatch}.sign}
   0010-archlinux-base.patch{,.sig}
+  0011-kbuild-optimize-for-performance-o3.patch{,.sig}
   0120-tlbpull.patch{,.sig}
   0121-smp-preempt.patch{,.sig}
   0130-sched-detach-tasks.patch{,.sig}
@@ -63,6 +64,7 @@ source=(
   0210-pstate.patch{,.sig}
   0211-amd-pstate-fixes.patch{,.sig}
   0212-amd-pstate-epp-cache.patch{,.sig}
+  0220-x86-amd-zen5-tlb-sizes.patch{,.sig}
   0250-zsmalloc.patch{,.sig}
   0260-mglru-exec-protect.patch{,.sig}
   0270-ksm-rmap-walk.patch{,.sig}
@@ -151,6 +153,8 @@ b2sums=('48551bee71cd02815136fb8abe7da4464c2e17c89ef35cb0c0530c8b969fe12127ca97a
         'SKIP'
         '6d92fb81077232b8cd1ae500b3aabc71434792e750ea6126dc095e50d4278d3e42b3cfdc3c8bc693ea14b109f6adfa3a1ed095187fc5501962fbe8f049f867bc'
         'SKIP'
+        'cc2a66a097b5567e80c59b7d6c492fef5e667fc71a0390908712c69512c4136dbaf3d150b62d04eff960c796f7a94e6d0915d3b92cb336318b49f5f516a3bba6'
+        'SKIP'
         'f6c00ac2400580dffe3605d2693809396e18185f0c59b21b86f1f22a1f8d6529c51e8cc2474bc40f74a96631f415da51521a8b35d5b096e9b9d164c2755fb091'
         'SKIP'
         '6aa6ea3690f3e4e145818650537cd110d33720d662af0b3660d95e15a3f91e48c993e31117c0a2fde852f55a77a83e3a50a1a95c0df78a33ae75d43d46a9fe15'
@@ -178,6 +182,8 @@ b2sums=('48551bee71cd02815136fb8abe7da4464c2e17c89ef35cb0c0530c8b969fe12127ca97a
         '13beae6f8d23a1f075410f50c09bc94f24f505571af1feb3cee58f732c0d649a9ce5939bc11642c4f3c8dfbd967939b2a0a205220abf06f10d559c4c43a946a3'
         'SKIP'
         '2f24f88d8f960148046c36222fdaaadfed2ca88c60240fa1d111430898192ca45aeaa93a3afa24ad02b11c4dc8c3904a92f17c0284396f2f43352ad934a35056'
+        'SKIP'
+        'e59c4da548b2ea4fd6144886e3e2e765b3e73972121e9e73dbc05c066834b2b35e6ef4c17617e77efc90260566bf7c0910d2138d8d5c1c3b6094eeac9de64cfe'
         'SKIP'
         '9809e258eb684b80d508fa2f2fa270683b62bd1412ed05a970114aaa7d84c37c0beaea51f9ff8c6ee1bc7318c4aee3725e9a1131fefb51ba700801de6ac414c5'
         'SKIP'
@@ -333,12 +339,14 @@ b2sums=('48551bee71cd02815136fb8abe7da4464c2e17c89ef35cb0c0530c8b969fe12127ca97a
         'SKIP'
         'b69cf36cc5633e507866e67f59557646dda7d6ea436b145f3f3356c4b12e1300c94977a7d1214835f2476c94a30dd672076241b920d96d744fbc199539df506f'
         'SKIP')
-b2sums_x86_64=('11bfedf70dc9366a42b42573a3677e348fcd7b253ce13118036a75190e6c9372f9549589ff2dbfac5b976fc15d11a1b193baaee2135d331ca90f8a9a9a6e1462')
+b2sums_x86_64=('5cbc3cba5e3abe4c77a54aeb2015b04e39dc80351accaa7c268da3e67577c0ad47109b8693bf2dee8d5366d0a0df3e6439c32d18fcf5ea07345bfcf517e5036d')
 
 # https://www.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc
 sha256sums=('55ddf0df8325d9dad96fcff7bd93977d22e3f50af06527572af59b77c7632b78'
             'SKIP'
             '95f3e9209629044028373af987dc0e270a5a15acb8c8e49c5f05057220c75fe2'
+            'SKIP'
+            '6cf74fc3f28a751354187b6cf610c3e43cf9088b5f730b68dbb575828c3a7478'
             'SKIP'
             'a9171e731d08a454a50174889af8936fab962b33c37c67169b0cdf21b0b80821'
             'SKIP'
@@ -367,6 +375,8 @@ sha256sums=('55ddf0df8325d9dad96fcff7bd93977d22e3f50af06527572af59b77c7632b78'
             'dac26fb42f5df71b30c46b3c5894c6016af5a283c57b45173386767ca53b1bf8'
             'SKIP'
             '66eb2c49dbf708cc781d411d0e44ed613480f0ef66d522272929d9cb7bb21e93'
+            'SKIP'
+            '718b40e15350049e03c0ed281b9257fca5432b8dec2e0e145e8b26507ee8892d'
             'SKIP'
             'b7ba949eea77e169aceb2c401d4eb83a7413aab6f15ee2a7ab1a96352f0aa12d'
             'SKIP'

@@ -1,9 +1,13 @@
 # Maintainer: Ryan Hughes <ryan@omarchy.org>
 pkgname='omarchy-settings-dev'
-pkgver=4.0.0.r847.g4de185b
+pkgver=4.0.0.r6646.gbf44355
 pkgrel=1
-_pkgver_base=4.0.0
-_pkgver_base_tag=v3.8.2
+# Pinned by the upstream watch in .omarchy/package.json (bin/sync-upstream):
+# every quattro tip becomes a commit pin here, so the package is versioned,
+# checksummed and built exactly like a release, just more often. The r-number
+# is the branch's total commit count, not the distance from the last tag: the
+# published history used the total, and pacman must never see it go down.
+_commit=bf44355a985b1bb82cb33df47fc17f765f3b2c4f
 pkgdesc='Omarchy user defaults, /etc/skel content, fonts, plymouth theme, and support helpers (quattro branch tip)'
 # Arch-specific because the shipped /etc tree is not the same on every
 # architecture: the Limine, mkinitcpio, zram and oomd drop-ins belong to the
@@ -110,29 +114,15 @@ _etc_override_paths=(
   'etc/plymouth/plymouthd.conf'
 )
 
-# Source: quattro branch tip by default; set OMARCHY_SRC=/path/to/checkout
-# to build from a local source tree instead (mirrors omarchy-zsh/omarchy-fish DX).
+# Source: the pinned quattro commit. Set OMARCHY_SRC=/path/to/checkout to
+# build from a local source tree instead (mirrors omarchy-zsh/omarchy-fish DX);
+# the arrays are emptied below so nothing is downloaded in that case.
+source=("omarchy::git+https://github.com/basecamp/omarchy.git#commit=${_commit}")
+sha256sums=('7a90239fd67124279817d614fa6aa19554f40796c523ba698669fbf57fa41668')
 if [[ -n "${OMARCHY_SRC:-}" ]]; then
   source=()
   sha256sums=()
-else
-  source=("omarchy::git+https://github.com/basecamp/omarchy.git#branch=quattro")
-  sha256sums=('SKIP')
 fi
-
-pkgver() {
-  cd "$srcdir/omarchy"
-
-  local commit_count commit_hash
-  if git rev-parse --verify "${_pkgver_base_tag}^{commit}" >/dev/null 2>&1; then
-    commit_count=$(git rev-list --count "${_pkgver_base_tag}..HEAD")
-  else
-    commit_count=$(git rev-list --count HEAD)
-  fi
-  commit_hash=$(git rev-parse --short=7 HEAD)
-
-  printf "%s.r%s.g%s" "$_pkgver_base" "$commit_count" "$commit_hash"
-}
 
 prepare() {
   if [[ -n "${OMARCHY_SRC:-}" ]]; then
@@ -367,6 +357,21 @@ EOF
   # systemd path so the hook fires.
   install -Dm755 default/systemd/system-sleep/unmount-fuse \
     "$pkgdir/usr/lib/systemd/system-sleep/unmount-fuse"
+
+  # Pacman platform guard: refuses packages tagged for another hardware
+  # platform. It ships here, not in omarchy, so it is resident before the
+  # runtime and any hardware package install; the hook, the script it runs and
+  # the script's own copy of the platform detector travel together (omarchy
+  # keeps /usr/bin/omarchy-hw-platform). Conditional until the pinned source
+  # carries them.
+  if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
+    install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
+      "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
+    install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
+      "$pkgdir/usr/share/libalpm/scripts/omarchy-platform-guard"
+    install -Dm755 bin/omarchy-hw-platform \
+      "$pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform"
+  fi
 
   # Branding assets (logos, icons).
   install -Dm644 logo.txt "$pkgdir/usr/share/omarchy/logo.txt"

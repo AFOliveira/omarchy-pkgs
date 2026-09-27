@@ -4,18 +4,18 @@
 # shellcheck shell=bash disable=SC2034,SC2154
 pkgname=cua-hyprland-plugin
 pkgver=0.26.1
-pkgrel=5
-pkgdesc='Cua input candidate for reviewed profile omarchy-hyprland-0562r3-remaps'
+pkgrel=6
+pkgdesc='Cua input candidate for reviewed profile omarchy-hypr0562r3-aq0151-remaps'
 arch=('x86_64')
 url='https://github.com/trycua/cua'
 license=('MIT')
-depends=('hyprland=0.56.2-3' 'aquamarine=0.15.0-2' 'glibc=2.44+r24+g16be1518495f-1' 'hyprcursor=0.1.13-7' 'hyprgraphics=0.5.1-4' 'hyprlang=0.6.8-5' 'hyprutils=0.14.2-1' 'libgcc=16.2.1+r23+gd564253eb6c8-1' 'libstdc++=16.2.1+r23+gd564253eb6c8-1' 'libxkbcommon=1.13.2-1' 'wayland=1.26.0-1' 'python>=3.11' 'binutils')
+depends=('hyprland=0.56.2-3' 'aquamarine=0.15.1-1' 'glibc=2.44+r24+g16be1518495f-1' 'hyprcursor=0.1.13-7' 'hyprgraphics=0.5.1-4' 'hyprlang=0.6.8-5' 'hyprutils=0.14.2-1' 'libgcc=16.2.1+r23+gd564253eb6c8-1' 'libstdc++=16.2.1+r23+gd564253eb6c8-1' 'libxkbcommon=1.13.2-1' 'wayland=1.26.0-1' 'python>=3.11' 'binutils')
 makedepends=('cmake>=3.30' 'ninja' 'pkgconf' 'gcc' 'patch')
 options=('!strip' '!debug' '!lto')
 _stem='cua-hyprland-plugin-0.26.1-cc54254464c0c9aebfd6547fe7e4a0ceaf0456d7'
 _archive_sha256='47bca9e018f32f4fcfe683f91c7475c60368f3b65d318cc35c1f2de88a4ee9ab'
-_kit_sha256='089f447e11cacd8c2d3d6cd56528776417c51d353b9677c47c42bba1ef79c9f9'
-_profile_sha256='fc3034649af98f7f81178ef575660143c249664b9ff5d0e1ccaf79d7580df17b'
+_kit_sha256='819779b93655d603d9ebb0d33ea052326c3374674a1d473886106af25e0fffdd'
+_profile_sha256='a2eade8b8195036be2c666788a1d28ac722403285a35987d92b3344e095f9a5e'
 _verifier_sha256='480f649cbd35a0ddc7f49dc0a3a44785402c9e0ec9653b0f8ea4965d52d7f900'
 _cxx="${CUA_RELEASE_CXX:-/usr/bin/g++}"
 _download_name='cua-hyprland-plugin-0.26.1-cc54254464c0c9aebfd6547fe7e4a0ceaf0456d7-profile-omarchy-stable-20260910-kit-1.1.0-5dacea79a6a5927e59fca7b51e6c04e94fa45133ac1b8fb7f4e1f442d113eb9a-67f89ceb47edd973aa748820eadd02ddbfb3d3e4.tar.gz'
@@ -24,7 +24,7 @@ source=('https://github.com/trycua/cua/releases/download/cua-hyprland-kit-v1.1.0
         'PROFILE.json')
 noextract=("$_download_name")
 sha256sums=('a89bfa7f6490f598719dfabdd2a5badc137e27b0764fd25e6a05e1f969433520'
-            'fc3034649af98f7f81178ef575660143c249664b9ff5d0e1ccaf79d7580df17b')
+            'a2eade8b8195036be2c666788a1d28ac722403285a35987d92b3344e095f9a5e')
 
 # Downstream inputs are also checked explicitly when makepkg integrity is skipped.
 declare -gA _downstream_sha256=(
@@ -71,33 +71,34 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as contents:
         require(digest(content) == expected[member.name], 'outer kit member checksum mismatch')
         payload[member.name] = content
 require(payload.keys() == expected.keys(), 'outer kit inventory mismatch')
-# Arch's -3 package has the same compositor and all 498 headers/pkg-config
-# files as -2. Derive a version-only profile with the original source/tooling
-# and byte checks intact; record its own profile and kit provenance digests.
+# Derive the reviewed Hyprland -3/Aquamarine 0.15.1 profile while preserving
+# upstream source/tooling and compiler, compositor, header and runtime hashes.
 profile_data = Path(profile_path).read_bytes()
-require(digest(profile_data) == 'fc3034649af98f7f81178ef575660143c249664b9ff5d0e1ccaf79d7580df17b',
+require(digest(profile_data) == 'a2eade8b8195036be2c666788a1d28ac722403285a35987d92b3344e095f9a5e',
         'local profile checksum mismatch')
 profile = json.loads(payload['PROFILE.json'])
-profile.update(profile_id='omarchy-hyprland-0562r3-remaps', package_release=5)
+profile.update(profile_id='omarchy-hypr0562r3-aq0151-remaps', package_release=6)
 profile['hyprland']['package_version'] = '0.56.2-3'
-require(json.loads(profile_data) == profile, 'local profile changes more than the reviewed package revision')
+profile['runtime']['packages']['aquamarine'] = '0.15.1-1'
+require(json.loads(profile_data) == profile, 'local profile changes more than the reviewed package versions')
 payload['PROFILE.json'] = profile_data
 provenance = json.loads(payload['KIT-PROVENANCE.json'])
 provenance['profile_sha256'] = digest(profile_data)
 payload['KIT-PROVENANCE.json'] = (json.dumps(provenance, sort_keys=True, indent=2) + '\n').encode()
 recipe = payload['PKGBUILD'].decode()
-for old, new in [('pkgrel=2\n', 'pkgrel=5\n'), ('omarchy-stable-20260910', profile['profile_id']),
+for old, new in [('pkgrel=2\n', 'pkgrel=6\n'), ('omarchy-stable-20260910', profile['profile_id']),
                  ('hyprland=0.56.2-2', 'hyprland=0.56.2-3'),
+                 ('aquamarine=0.15.0-2', 'aquamarine=0.15.1-1'),
                  ('5dacea79a6a5927e59fca7b51e6c04e94fa45133ac1b8fb7f4e1f442d113eb9a', digest(profile_data)),
                  ('7beb736adfd334eed52e84070177634269e3a09f8bb25971b38606933ff4c997', digest(payload['KIT-PROVENANCE.json']))]:
     recipe = recipe.replace(old, new)
 payload['PKGBUILD'] = recipe.encode()
 payload['SHA256SUMS'] = ''.join(f'{digest(body)}  {name}\n' for name, body in sorted(payload.items())
                               if name != 'SHA256SUMS').encode()
-expected.update({'PROFILE.json': 'fc3034649af98f7f81178ef575660143c249664b9ff5d0e1ccaf79d7580df17b',
-                 'KIT-PROVENANCE.json': '089f447e11cacd8c2d3d6cd56528776417c51d353b9677c47c42bba1ef79c9f9',
-                 'PKGBUILD': '0cbf2cd34c3c5038a5ed51e6bf84acd81844e4c2bb08ad7203959201bba61da9',
-                 'SHA256SUMS': 'd01b9e0be4c5bcf84cc2ecef9f11f44cedfc1ca5b31afbfcf52aa2efbd636a09'})
+expected.update({'PROFILE.json': 'a2eade8b8195036be2c666788a1d28ac722403285a35987d92b3344e095f9a5e',
+                 'KIT-PROVENANCE.json': '819779b93655d603d9ebb0d33ea052326c3374674a1d473886106af25e0fffdd',
+                 'PKGBUILD': 'c3e4149eba3f7def10ef700b30b9d0abcea994e3dd32fb169014874a0b75687c',
+                 'SHA256SUMS': 'd9057a9534f7a820ee04cbf5d60db567c5072fa96d1f71030a6a85b4bb7ce881'})
 for name, content in payload.items():
     require(digest(content) == expected[name], 'derived kit checksum mismatch: ' + name)
 require(srcdir.is_dir() and not srcdir.is_symlink(), 'srcdir must be a real directory')
