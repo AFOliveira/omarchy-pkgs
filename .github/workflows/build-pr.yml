@@ -88,8 +88,12 @@ jobs:
           if [[ -n "${{ github.event.inputs.packages }}" ]]; then
             names="${{ github.event.inputs.packages }}"
           else
+            # A package the PR deletes has nothing to build.
             names=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" -- pkgbuilds \
-              | awk -F/ '$1=="pkgbuilds" && NF>2 {print $2}' | sort -u)
+              | awk -F/ '$1=="pkgbuilds" && NF>2 {print $2}' | sort -u \
+              | while read -r name; do
+                  if git cat-file -e "${{ github.event.pull_request.head.sha }}:pkgbuilds/$name" 2>/dev/null; then echo "$name"; fi
+                done)
           fi
           matrix=$(printf '%s\n' $names | bin/build-matrix)
           # A package directory whose exact tree already has a build artifact
