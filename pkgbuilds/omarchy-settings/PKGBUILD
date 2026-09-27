@@ -13,7 +13,7 @@ pkgname='omarchy-settings'
 _tag='v4.0.4'
 _commit='c668141e9c42b13c80c9ca4ea108e11708c5e8a5'
 pkgver=4.0.4
-pkgrel=2
+pkgrel=3
 pkgdesc='Omarchy user defaults, /etc/skel content, fonts, plymouth theme, and support helpers'
 # Arch-specific because the shipped /etc tree is not the same on every
 # architecture: the zram and oomd drop-ins belong to the x86_64 memory stack
@@ -218,6 +218,22 @@ package() {
     # Thunderbolt module request is x86-specific; ARM kernels lack the module
     # and mkinitcpio treats a missing explicit module as an error.
     rm -f "$pkgdir/etc/mkinitcpio.conf.d/thunderbolt_module.conf"
+    # Apple Silicon Macs install this package too. Their initramfs needs the
+    # asahi hook, which omarchy-mac-boot's 90-94 fragments (Aurora) or
+    # mkinitcpio.conf (legacy GRUB Macs) set, and an unconditional HOOKS= here
+    # would replace it. Omarchy's line applies only when the hooks loaded so far
+    # lack asahi. The check reads configuration, not the running machine, so it
+    # also holds when the image is built in a chroot.
+    local hooks_conf guarded=0
+    for hooks_conf in "$pkgdir"/etc/mkinitcpio.conf.d/{00-omarchy-hooks,omarchy_hooks}.conf; do
+      [[ -f $hooks_conf ]] && grep -q '^HOOKS=(' "$hooks_conf" || continue
+      sed -i 's/^\(HOOKS=(.*)\)$/if [[ " ${HOOKS[*]:-} " != *" asahi "* ]]; then\n  \1\nfi/' "$hooks_conf"
+      guarded=1
+    done
+    if (( ! guarded )); then
+      echo "No HOOKS= line to guard for Apple Silicon in etc/mkinitcpio.conf.d" >&2
+      return 1
+    fi
     # Memory stack: no zram device or zswap on the aarch64 install, and
     # systemd-oomd is not enabled there, so the vm.* reclaim tuning written
     # for zram would be wrong for it. Keep only the network tuning.
