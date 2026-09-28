@@ -435,9 +435,11 @@ EOF
   # platform. It ships here, not in omarchy, so it is resident before the
   # runtime and any hardware package install; the hook, the script it runs and
   # the script's own copy of the platform detector travel together (omarchy
-  # keeps /usr/bin/omarchy-hw-platform). Conditional until the pinned source
-  # carries them.
-  if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
+  # keeps /usr/bin/omarchy-hw-platform). aarch64 only: no platform package is
+  # built for x86_64, so an x86 machine has nothing to guard, and its HOOKS
+  # baseline needs no detector. Conditional until the pinned source carries
+  # them.
+  if [[ $CARCH == aarch64 && -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
     install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
       "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
     install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
@@ -447,7 +449,9 @@ EOF
   fi
   # 00-omarchy-hooks.conf places a Mac through this detector copy; without it
   # an Aurora Mac gets the busybox line and its initramfs cannot unlock root.
-  if grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
+  # x86_64 keeps the busybox line either way.
+  if [[ $CARCH == aarch64 ]] &&
+    grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
     [[ ! -x $pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform ]]; then
     echo "etc/mkinitcpio.conf.d/00-omarchy-hooks.conf needs the omarchy-hw-platform copy the source does not ship" >&2
     return 1

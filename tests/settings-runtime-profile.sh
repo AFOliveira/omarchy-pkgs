@@ -178,10 +178,10 @@ for recipe in omarchy-settings; do
   # A runtime-profile source ships the same tree and metadata on both.
   package_as "$recipe" "$scratch/profile" x86_64 profile-x86_64 checkout
   package_as "$recipe" "$scratch/profile" aarch64 profile-aarch64 pinned
-  # The pacman platform guard is the profile's one exception: aarch64 only
-  # where the recipe says so (omacom/omarchy-pkgs#691).
+  # The pacman platform guard is the profile's one exception: aarch64 only.
   for path in "${platform_guard[@]}"; do
     in_list "$path" "$scratch/profile-aarch64.files" || fail "aarch64 ships the platform guard's $path"
+    ! in_list "$path" "$scratch/profile-x86_64.files" || fail "x86_64 leaves out the platform guard's $path"
   done
   grep -Fxv -f <(printf '%s\n' "${platform_guard[@]}") "$scratch/profile-x86_64.files" >"$scratch/profile-x86_64.compared"
   grep -Fxv -f <(printf '%s\n' "${platform_guard[@]}") "$scratch/profile-aarch64.files" >"$scratch/profile-aarch64.compared"
