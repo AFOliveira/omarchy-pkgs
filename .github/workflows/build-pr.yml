@@ -20,9 +20,16 @@ on:
         description: "Space-separated package directories to build"
         required: true
 
+# A new push normally cancels the PR's in-flight build. The sync bots'
+# branches (auto/sync-*) are the exception: they are force-pushed with fresh
+# upstream releases several times a day, which kept cancelling multi-hour
+# aarch64 builds before they could finish. There the newest run waits
+# instead (GitHub keeps at most one pending run per group, replacing older
+# pending ones), and when it starts it reuses every artifact the finished
+# build uploaded, so only packages whose tree changed are built again.
 concurrency:
   group: build-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !(github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'auto/sync-')) }}
 
 jobs:
   # Builds cost real machines, so they run only for trusted authors:
@@ -88,8 +95,13 @@ jobs:
           if [[ -n "${{ github.event.inputs.packages }}" ]]; then
             names="${{ github.event.inputs.packages }}"
           else
+            # The PR's own files, as GitHub lists them against the merge base.
+            # A two-dot diff against the current base tip also counted every
+            # package master changed after the PR branched, so a stale PR
+            # planned dozens of unrelated packages at its old versions. The
+            # checkout here is shallow, so there is no merge base to diff from.
             # A package the PR deletes has nothing to build.
-            names=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" -- pkgbuilds \
+            names=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename' \
               | awk -F/ '$1=="pkgbuilds" && NF>2 {print $2}' | sort -u \
               | while read -r name; do
                   if git cat-file -e "${{ github.event.pull_request.head.sha }}:pkgbuilds/$name" 2>/dev/null; then echo "$name"; fi
@@ -195,7 +207,10 @@ jobs:
           git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.head.sha }}"
           git checkout "${{ github.event.pull_request.head.sha }}" -- pkgbuilds/
           echo "tooling: $(git rev-parse --short HEAD) (base)  packages: ${{ github.event.pull_request.head.sha }} (PR head)"
-          git status --short | head
+          # A preview only. `head` exits after ten lines and, under pipefail,
+          # git's SIGPIPE (141) failed the step for any PR far enough behind
+          # master to differ in more files; sed reads the whole stream.
+          git status --short | sed -n '1,10p'
       - name: Build ${{ matrix.package }} (${{ matrix.arch }}, ships to ${{ matrix.channels }})
         id: build
         env:

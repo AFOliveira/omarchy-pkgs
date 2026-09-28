@@ -1,19 +1,20 @@
 # Maintainer: Ryan Hughes <ryan@omarchy.org>
 pkgname='omarchy-settings-dev'
-pkgver=4.0.0.r6646.gbf44355
-pkgrel=1
+pkgver=4.0.0.r6663.g3faafba
+pkgrel=2
 # Pinned by the upstream watch in .omarchy/package.json (bin/sync-upstream):
 # every quattro tip becomes a commit pin here, so the package is versioned,
 # checksummed and built exactly like a release, just more often. The r-number
 # is the branch's total commit count, not the distance from the last tag: the
 # published history used the total, and pacman must never see it go down.
-_commit=bf44355a985b1bb82cb33df47fc17f765f3b2c4f
+_commit=3faafba234e530b0986196b98dc2c38951e7dd6f
 pkgdesc='Omarchy user defaults, /etc/skel content, fonts, plymouth theme, and support helpers (quattro branch tip)'
 # Arch-specific because the shipped /etc tree is not the same on every
-# architecture: the Limine, mkinitcpio, zram and oomd drop-ins belong to the
-# x86_64 boot and memory stack and are left out of the aarch64 package (see
-# package()). makepkg only honours the arch-suffixed arrays below on
-# arch-specific packages.
+# architecture: the zram and oomd drop-ins belong to the x86_64 memory stack
+# and are left out of the aarch64 package (see package()). The Limine and
+# mkinitcpio drop-ins ship on both: UEFI aarch64 installs (DGX Spark,
+# Snapdragon X) boot with Limine and an encrypted root exactly like x86_64.
+# makepkg only honours the arch-suffixed arrays below on arch-specific packages.
 arch=('x86_64' 'aarch64')
 url='https://github.com/basecamp/omarchy'
 license=('MIT')
@@ -73,14 +74,17 @@ backup=(
   'etc/udev/rules.d/99-omarchy-power-profile.rules'
   'etc/udev/rules.d/99-omarchy-wifi-powersave.rules'
 )
+# Boot configuration is backed up on both architectures.
+backup+=(
+  'etc/mkinitcpio.conf.d/omarchy_hooks.conf'
+  'etc/limine-entry-tool.d/omarchy-defaults.conf'
+  'etc/limine-entry-tool.d/omarchy-uki.conf'
+)
 # backup has no arch-suffixed form, so the x86_64-only drop-ins join it here.
 # Each of these paths is removed from the aarch64 package in package().
 if [[ $CARCH == x86_64 ]]; then
   backup+=(
-    'etc/mkinitcpio.conf.d/omarchy_hooks.conf'
     'etc/mkinitcpio.conf.d/thunderbolt_module.conf'
-    'etc/limine-entry-tool.d/omarchy-defaults.conf'
-    'etc/limine-entry-tool.d/omarchy-uki.conf'
     'etc/modprobe.d/omarchy-usb-autosuspend.conf'
     'etc/systemd/oomd.conf.d/10-omarchy.conf'
     'etc/systemd/zram-generator.conf'
@@ -117,7 +121,7 @@ _etc_override_paths=(
 # build from a local source tree instead (mirrors omarchy-zsh/omarchy-fish DX);
 # the arrays are emptied below so nothing is downloaded in that case.
 source=("omarchy::git+https://github.com/basecamp/omarchy.git#commit=${_commit}")
-sha256sums=('7a90239fd67124279817d614fa6aa19554f40796c523ba698669fbf57fa41668')
+sha256sums=('d97e0f12d9f17bfd78872bdc12edb63184b59483f055178d8d80597ed132882f')
 if [[ -n "${OMARCHY_SRC:-}" ]]; then
   source=()
   sha256sums=()
@@ -129,6 +133,23 @@ prepare() {
     mkdir -p "$srcdir/omarchy"
     cp -a "${OMARCHY_SRC}/." "$srcdir/omarchy/"
   fi
+}
+
+# Print the HOOKS that result from sourcing mkinitcpio drop-ins onto a line.
+_omarchy_settings_hooks_after() {
+  local start=$1
+  shift
+  (
+    # Keep the build host's own tools, such as a platform detector, out of it.
+    PATH=/nonexistent
+    read -ra HOOKS <<<"$start"
+    MODULES=() FILES=()
+    for conf in "$@"; do
+      # shellcheck disable=SC1090
+      source "$conf" || exit 1
+    done
+    echo "${HOOKS[*]}"
+  )
 }
 
 package() {
@@ -150,14 +171,6 @@ package() {
   # users re-sync against.
   install -d "$pkgdir/usr/share/omarchy/config"
   cp -a config/. "$pkgdir/usr/share/omarchy/config/"
-
-  # The Limine/Snapper notifier has nothing to notify about without the x86_64
-  # boot stack; drop it from both seeds so aarch64 users don't autostart a
-  # helper whose backing tool is not installed.
-  if [[ $CARCH == aarch64 ]]; then
-    rm -f "$pkgdir/etc/skel/.config/autostart/limine-snapper-notify.desktop" \
-      "$pkgdir/usr/share/omarchy/config/autostart/limine-snapper-notify.desktop"
-  fi
 
   # Package-owned defaults with real system/XDG locations. User config remains
   # higher priority: ~/.config/uwsm/default, ~/.config/uwsm/env.d,
@@ -207,12 +220,44 @@ package() {
   # stage separately below).
   install -d "$pkgdir/etc"
   cp -a etc/. "$pkgdir/etc/"
+  # omacom/omarchy#13362 moves the HOOKS baseline into its own drop-in.
+  [[ ! -f $pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf ]] ||
+    backup+=('etc/mkinitcpio.conf.d/00-omarchy-hooks.conf')
   if [[ $CARCH == aarch64 ]]; then
-    # The x86_64 boot stack's drop-ins must not ship on aarch64: mkinitcpio
-    # reads every file under /etc/mkinitcpio.conf.d/, so omarchy_hooks.conf
-    # would inject the Limine hooks into the Asahi kernel's initramfs, and the
-    # Limine entry-tool config has no consumer without Limine.
-    rm -rf "$pkgdir/etc/limine-entry-tool.d" "$pkgdir/etc/mkinitcpio.conf.d"
+    # Keep omarchy_hooks.conf and the Limine entry-tool config: without them a
+    # kernel update on an encrypted aarch64 install rebuilds an initramfs with
+    # no encrypt hook and the machine cannot unlock its root. Only the
+    # Thunderbolt module request is x86-specific; ARM kernels lack the module
+    # and mkinitcpio treats a missing explicit module as an error.
+    rm -f "$pkgdir/etc/mkinitcpio.conf.d/thunderbolt_module.conf"
+    # Apple Silicon Macs install this package too. Their initramfs needs the
+    # asahi hook, which omarchy-mac-boot's 90-94 fragments (Aurora) or
+    # mkinitcpio.conf (legacy GRUB Macs) set, and an unconditional HOOKS= here
+    # would replace it. A source that sets HOOKS outright (v4.0.4) gets its line
+    # wrapped so it applies only when the hooks loaded so far lack asahi; one that
+    # already decides per platform (omacom/omarchy#13362) ships as it is. The
+    # wrapper reads configuration, not the running machine, so it also holds
+    # when the image is built in a chroot.
+    local hooks_conf hooks_confs=()
+    for hooks_conf in "$pkgdir"/etc/mkinitcpio.conf.d/{00-omarchy-hooks,omarchy_hooks}.conf; do
+      [[ -f $hooks_conf ]] || continue
+      hooks_confs+=("$hooks_conf")
+      sed -i 's/^\(HOOKS=([^#]*)\)[[:space:]]*$/if [[ " ${HOOKS[*]:-} " != *" asahi "* ]]; then\n  \1\nfi/' "$hooks_conf"
+      if grep -q '^HOOKS=' "$hooks_conf"; then
+        echo "${hooks_conf#"$pkgdir"/}: cannot guard this HOOKS= line for Apple Silicon" >&2
+        return 1
+      fi
+    done
+    # Whatever the layout, a Mac's asahi line must come through the shipped
+    # files, and a stock line must not: that is where Omarchy's hooks come from.
+    local mac_line='base udev block asahi encrypt filesystems fsck' stock_line='base udev block filesystems fsck'
+    local mac_hooks stock_hooks
+    if ! mac_hooks=$(_omarchy_settings_hooks_after "$mac_line" "${hooks_confs[@]}") ||
+      ! stock_hooks=$(_omarchy_settings_hooks_after "$stock_line" "${hooks_confs[@]}") ||
+      [[ $mac_hooks != "$mac_line" || $stock_hooks == "$stock_line" ]]; then
+      echo "etc/mkinitcpio.conf.d: the aarch64 hooks must keep a Mac's asahi line and set everyone else's" >&2
+      return 1
+    fi
     # Memory stack: no zram device or zswap on the aarch64 install, and
     # systemd-oomd is not enabled there, so the vm.* reclaim tuning written
     # for zram would be wrong for it. Keep only the network tuning.
@@ -316,11 +361,6 @@ EOF
   # live root config.
   install -d "$pkgdir/usr/share/omarchy/default"
   cp -a default/. "$pkgdir/usr/share/omarchy/default/"
-  # The Limine template is read by the x86_64 ISO orchestrator only.
-  if [[ $CARCH == aarch64 ]]; then
-    rm -rf "$pkgdir/usr/share/omarchy/default/limine"
-  fi
-
   # Snapper config template used by the install-time `snapper create-config`.
   install -Dm644 default/snapper/root \
     "$pkgdir/etc/snapper/config-templates/omarchy"
@@ -367,6 +407,13 @@ EOF
       "$pkgdir/usr/share/libalpm/scripts/omarchy-platform-guard"
     install -Dm755 bin/omarchy-hw-platform \
       "$pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform"
+  fi
+  # 00-omarchy-hooks.conf places a Mac through this detector copy; without it
+  # an Aurora Mac gets the busybox line and its initramfs cannot unlock root.
+  if grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
+    [[ ! -x $pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform ]]; then
+    echo "etc/mkinitcpio.conf.d/00-omarchy-hooks.conf needs the omarchy-hw-platform copy the source does not ship" >&2
+    return 1
   fi
 
   # Branding assets (logos, icons).
