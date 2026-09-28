@@ -22,7 +22,7 @@ conflicts=('omarchy')
 depends=(
   # Omarchy meta
   'omarchy-keyring'
-  "omarchy-settings-dev=${pkgver}-${pkgrel}"
+  'omarchy-settings-dev'
 
   # Wayland / Hyprland core
   'hyprland'
@@ -98,8 +98,7 @@ prepare() {
 package() {
   cd "$srcdir/omarchy"
 
-  # Runtime binaries — settings owns diagnostics and the sudo grant lifecycle.
-  # Ship everything in bin/ except those support helpers
+  # Runtime binaries — ship everything in bin/ except the debug helpers
   # that ship from omarchy-settings (needed before omarchy is installed,
   # e.g. on the ISO live env).
   install -d "$pkgdir/usr/bin" "$pkgdir/usr/share/omarchy/bin"
@@ -108,7 +107,7 @@ package() {
     local base
     base=$(basename "$bin")
     case "$base" in
-      omarchy-debug|omarchy-debug-idle|omarchy-upload-log|omarchy-sudo-passwordless|omarchy-security-functions)
+      omarchy-debug|omarchy-debug-idle|omarchy-upload-log)
         continue
         ;;
     esac
