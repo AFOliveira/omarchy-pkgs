@@ -13,7 +13,7 @@ pkgname='omarchy-settings'
 _tag='v4.0.4'
 _commit='c668141e9c42b13c80c9ca4ea108e11708c5e8a5'
 pkgver=4.0.4
-pkgrel=1
+pkgrel=2
 pkgdesc='Omarchy user defaults, /etc/skel content, fonts, plymouth theme, and support helpers'
 # Arch-specific because the shipped /etc tree is not the same on every
 # architecture: the Limine, mkinitcpio, zram and oomd drop-ins belong to the
@@ -361,6 +361,21 @@ EOF
   # systemd path so the hook fires.
   install -Dm755 default/systemd/system-sleep/unmount-fuse \
     "$pkgdir/usr/lib/systemd/system-sleep/unmount-fuse"
+
+  # Pacman platform guard: refuses packages tagged for another hardware
+  # platform. It ships here, not in omarchy, so it is resident before the
+  # runtime and any hardware package install; the hook, the script it runs and
+  # the script's own copy of the platform detector travel together (omarchy
+  # keeps /usr/bin/omarchy-hw-platform). Conditional until the pinned source
+  # carries them.
+  if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
+    install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
+      "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
+    install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
+      "$pkgdir/usr/share/libalpm/scripts/omarchy-platform-guard"
+    install -Dm755 bin/omarchy-hw-platform \
+      "$pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform"
+  fi
 
   # Branding assets (logos, icons).
   install -Dm644 logo.txt "$pkgdir/usr/share/omarchy/logo.txt"

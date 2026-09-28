@@ -143,6 +143,45 @@ class SteamLauncherTests(unittest.TestCase):
             self.assertEqual(path.read_text(), content)
             self.assertFalse(path.with_suffix('.js.omarchy-bak').exists())
 
+    def test_unrelated_connected_state_does_not_skip_original_block(self):
+        original = 'other.m_bIsConnectedToANetwork=!0;' + ORIGINAL
+        path = self.chunk(original)
+        self.run_launcher('--prepare')
+        self.assertIn('catch(e){}', path.read_text())
+        self.assertTrue(path.read_text().startswith('other.m_bIsConnectedToANetwork=!0;'))
+        self.assertEqual(path.with_suffix('.js.omarchy-bak').read_text(), original)
+        patched, modified = path.read_bytes(), path.stat().st_mtime_ns
+        self.run_launcher('--prepare')
+        self.assertEqual(path.read_bytes(), patched)
+        self.assertEqual(path.stat().st_mtime_ns, modified)
+
+    def test_existing_desktop_override_is_preserved_during_prepare_and_launch(self):
+        self.client_ready()
+        self.chunk()
+        self.desktop.parent.mkdir(parents=True)
+        customized = '[Desktop Entry]\nName=My Steam\nExec=my-steam-wrapper %U\nX-User-Setting=keep\n'
+        self.desktop.write_text(customized)
+        modified = self.desktop.stat().st_mtime_ns
+        for args in [('--prepare',), ()]:
+            self.run_launcher(*args)
+            self.assertEqual(self.desktop.read_text(), customized)
+            self.assertEqual(self.desktop.stat().st_mtime_ns, modified)
+
+    def test_existing_desktop_symlink_is_preserved_even_with_missing_target(self):
+        self.desktop.parent.mkdir(parents=True)
+        target = self.user_home / 'custom-steam.desktop'
+        self.desktop.symlink_to(target)
+        self.run_launcher('--prepare')
+        self.assertTrue(self.desktop.is_symlink())
+        self.assertFalse(target.exists())
+
+    def test_repeated_prepare_does_not_rewrite_created_desktop_override(self):
+        self.run_launcher('--prepare')
+        original, modified = self.desktop.read_bytes(), self.desktop.stat().st_mtime_ns
+        self.run_launcher('--prepare')
+        self.assertEqual(self.desktop.read_bytes(), original)
+        self.assertEqual(self.desktop.stat().st_mtime_ns, modified)
+
     def test_only_first_matching_block_is_patched(self):
         path = self.chunk(ORIGINAL + ORIGINAL)
         self.run_launcher('--prepare')
