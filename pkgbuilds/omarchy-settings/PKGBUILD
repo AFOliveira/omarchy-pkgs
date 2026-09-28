@@ -13,14 +13,17 @@ pkgname='omarchy-settings'
 _tag='v4.0.4'
 _commit='c668141e9c42b13c80c9ca4ea108e11708c5e8a5'
 pkgver=4.0.4
-pkgrel=3
+pkgrel=4
 pkgdesc='Omarchy user defaults, /etc/skel content, fonts, plymouth theme, and support helpers'
 # Arch-specific because the shipped /etc tree is not the same on every
-# architecture: the zram and oomd drop-ins belong to the x86_64 memory stack
-# and are left out of the aarch64 package (see package()). The Limine and
-# mkinitcpio drop-ins ship on both: UEFI aarch64 installs (DGX Spark,
-# Snapdragon X) boot with Limine and an encrypted root exactly like x86_64.
-# makepkg only honours the arch-suffixed arrays below on arch-specific packages.
+# architecture for older sources: their zram and oomd drop-ins belong to the
+# x86_64 memory stack and are left out of the aarch64 package (see package()).
+# The Limine and mkinitcpio drop-ins ship on both: UEFI aarch64 installs (DGX
+# Spark, Snapdragon X) boot with Limine and an encrypted root exactly like
+# x86_64. A source with default/settings-runtime-profile decides at runtime
+# which platform-specific files apply, and its aarch64 package ships the same
+# files as x86_64. makepkg only honours the arch-suffixed arrays below on
+# arch-specific packages.
 arch=('x86_64' 'aarch64')
 url='https://github.com/basecamp/omarchy'
 license=('MIT')
@@ -86,14 +89,16 @@ backup+=(
   'etc/limine-entry-tool.d/omarchy-uki.conf'
 )
 # backup has no arch-suffixed form, so the x86_64-only drop-ins join it here.
-# Each of these paths is removed from the aarch64 package in package().
+# Each of these paths is removed from an older source's aarch64 package in
+# package(), which adds them back for a runtime-profile source.
+_x86_64_backup=(
+  'etc/mkinitcpio.conf.d/thunderbolt_module.conf'
+  'etc/modprobe.d/omarchy-usb-autosuspend.conf'
+  'etc/systemd/oomd.conf.d/10-omarchy.conf'
+  'etc/systemd/zram-generator.conf'
+)
 if [[ $CARCH == x86_64 ]]; then
-  backup+=(
-    'etc/mkinitcpio.conf.d/thunderbolt_module.conf'
-    'etc/modprobe.d/omarchy-usb-autosuspend.conf'
-    'etc/systemd/oomd.conf.d/10-omarchy.conf'
-    'etc/systemd/zram-generator.conf'
-  )
+  backup+=("${_x86_64_backup[@]}")
 fi
 
 optdepends=(
@@ -160,6 +165,20 @@ _omarchy_settings_hooks_after() {
 package() {
   cd "$srcdir/omarchy"
 
+  # A source that decides at runtime which platform-specific files apply (see
+  # default/settings-runtime-profile in it) ships its whole tree on aarch64,
+  # with the same backup and optdepends as x86_64. Older sources still leave
+  # the x86_64 memory stack out there.
+  local legacy_aarch64=0
+  if [[ $CARCH == aarch64 ]]; then
+    if [[ -f default/settings-runtime-profile ]]; then
+      backup+=("${_x86_64_backup[@]}")
+      optdepends+=("${optdepends_x86_64[@]}")
+    else
+      legacy_aarch64=1
+    fi
+  fi
+
   # /etc/skel/.config from config/** — system-wide default user config.
   # Package-owned defaults that live elsewhere in the system belong under
   # default/** or etc/** instead.
@@ -202,12 +221,16 @@ package() {
   install -Dm644 default/systemd/user/omarchy-tailscale-receive.service "$pkgdir/usr/lib/systemd/user/omarchy-tailscale-receive.service"
   install -Dm644 default/systemd/user/omarchy-fcitx5.service "$pkgdir/usr/lib/systemd/user/omarchy-fcitx5.service"
   install -Dm644 default/systemd/user/omarchy-crash-watch.service "$pkgdir/usr/lib/systemd/user/omarchy-crash-watch.service"
+  # First-run enables this unit, so it ships wherever the source has it.
+  if [[ -f default/systemd/user/omarchy-brightness-keyboard-auto.service ]]; then
+    install -Dm644 default/systemd/user/omarchy-brightness-keyboard-auto.service "$pkgdir/usr/lib/systemd/user/omarchy-brightness-keyboard-auto.service"
+  fi
   # Marks app.slice (and only app.slice) as a systemd-oomd kill candidate, so
   # memory pressure costs one app scope instead of the compositor session.
   # Thresholds live in etc/systemd/oomd.conf.d/10-omarchy.conf. Both this and
-  # the zram vendor drop-in belong to the x86_64 memory stack: the aarch64
-  # install neither enables systemd-oomd nor configures zram swap.
-  if [[ $CARCH == x86_64 ]]; then
+  # the zram vendor drop-in belong to the x86_64 memory stack: an older
+  # source's aarch64 install neither enables systemd-oomd nor configures zram.
+  if (( ! legacy_aarch64 )); then
     install -Dm644 default/systemd/user/app.slice.d/10-oomd.conf "$pkgdir/usr/lib/systemd/user/app.slice.d/10-oomd.conf"
     install -Dm644 default/systemd/zram-generator.conf.d/90-omarchy.conf "$pkgdir/usr/lib/systemd/zram-generator.conf.d/90-omarchy.conf"
   fi
@@ -234,22 +257,25 @@ package() {
   if [[ $CARCH == aarch64 ]]; then
     # Keep omarchy_hooks.conf and the Limine entry-tool config: without them a
     # kernel update on an encrypted aarch64 install rebuilds an initramfs with
-    # no encrypt hook and the machine cannot unlock its root. Only the
+    # no encrypt hook and the machine cannot unlock its root. An older source's
     # Thunderbolt module request is x86-specific; ARM kernels lack the module
-    # and mkinitcpio treats a missing explicit module as an error.
-    rm -f "$pkgdir/etc/mkinitcpio.conf.d/thunderbolt_module.conf"
+    # and mkinitcpio treats a missing explicit module as an error. A
+    # runtime-profile source adds it only where the kernel has the module.
+    (( ! legacy_aarch64 )) || rm -f "$pkgdir/etc/mkinitcpio.conf.d/thunderbolt_module.conf"
     # Apple Silicon Macs install this package too. Their initramfs needs the
     # asahi hook, which omarchy-mac-boot's 90-94 fragments (Aurora) or
     # mkinitcpio.conf (legacy GRUB Macs) set, and an unconditional HOOKS= here
-    # would replace it. A source that sets HOOKS outright (v4.0.4) gets its line
-    # wrapped so it applies only when the hooks loaded so far lack asahi; one that
-    # already decides per platform (omacom/omarchy#13362) ships as it is. The
-    # wrapper reads configuration, not the running machine, so it also holds
-    # when the image is built in a chroot.
+    # would replace it. An older source that sets HOOKS outright (v4.0.4) gets
+    # its line wrapped so it applies only when the hooks loaded so far lack
+    # asahi; one that already decides per platform (omacom/omarchy#13362), and
+    # every runtime-profile source, ships as it is. The wrapper reads
+    # configuration, not the running machine, so it also holds when the image
+    # is built in a chroot.
     local hooks_conf hooks_confs=()
     for hooks_conf in "$pkgdir"/etc/mkinitcpio.conf.d/{00-omarchy-hooks,omarchy_hooks}.conf; do
       [[ -f $hooks_conf ]] || continue
       hooks_confs+=("$hooks_conf")
+      (( legacy_aarch64 )) || continue
       sed -i 's/^\(HOOKS=([^#]*)\)[[:space:]]*$/if [[ " ${HOOKS[*]:-} " != *" asahi "* ]]; then\n  \1\nfi/' "$hooks_conf"
       if grep -q '^HOOKS=' "$hooks_conf"; then
         echo "${hooks_conf#"$pkgdir"/}: cannot guard this HOOKS= line for Apple Silicon" >&2
@@ -266,9 +292,12 @@ package() {
       echo "etc/mkinitcpio.conf.d: the aarch64 hooks must keep a Mac's asahi line and set everyone else's" >&2
       return 1
     fi
-    # Memory stack: no zram device or zswap on the aarch64 install, and
-    # systemd-oomd is not enabled there, so the vm.* reclaim tuning written
-    # for zram would be wrong for it. Keep only the network tuning.
+  fi
+  if (( legacy_aarch64 )); then
+    # Memory stack: no zram device or zswap on an older source's aarch64
+    # install, and systemd-oomd is not enabled there, so the vm.* reclaim
+    # tuning written for zram would be wrong for it. Keep only the network
+    # tuning.
     rm -rf "$pkgdir/etc/systemd/oomd.conf.d"
     rm -f "$pkgdir/etc/systemd/zram-generator.conf" "$pkgdir/etc/tmpfiles.d/omarchy-zswap.conf"
     cat >"$pkgdir/etc/sysctl.d/99-omarchy-sysctl.conf" <<'EOF'
@@ -406,9 +435,11 @@ EOF
   # platform. It ships here, not in omarchy, so it is resident before the
   # runtime and any hardware package install; the hook, the script it runs and
   # the script's own copy of the platform detector travel together (omarchy
-  # keeps /usr/bin/omarchy-hw-platform). Conditional until the pinned source
-  # carries them.
-  if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
+  # keeps /usr/bin/omarchy-hw-platform). aarch64 only: no platform package is
+  # built for x86_64, so an x86 machine has nothing to guard, and its HOOKS
+  # baseline needs no detector. Conditional until the pinned source carries
+  # them.
+  if [[ $CARCH == aarch64 && -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
     install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
       "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
     install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
@@ -418,7 +449,9 @@ EOF
   fi
   # 00-omarchy-hooks.conf places a Mac through this detector copy; without it
   # an Aurora Mac gets the busybox line and its initramfs cannot unlock root.
-  if grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
+  # x86_64 keeps the busybox line either way.
+  if [[ $CARCH == aarch64 ]] &&
+    grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
     [[ ! -x $pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform ]]; then
     echo "etc/mkinitcpio.conf.d/00-omarchy-hooks.conf needs the omarchy-hw-platform copy the source does not ship" >&2
     return 1
