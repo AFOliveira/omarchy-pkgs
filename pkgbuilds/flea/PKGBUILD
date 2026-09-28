@@ -1,7 +1,7 @@
 # Maintainer: GM <gianmarcomorales@icloud.com>
 
 pkgname=flea
-pkgver=0.3.4
+pkgver=0.3.5
 pkgrel=1
 pkgdesc='Fast, keyboard-first file manager for Omarchy'
 arch=('x86_64' 'aarch64')
@@ -52,7 +52,7 @@ options=('!debug')
 source=(
   "$url/releases/download/v$pkgver/$pkgname-v$pkgver.tar.gz"
 )
-sha256sums=('e5ad258126ae796d262b51254bfbd4a768416ae4d02da772663e6e24c90cdfe4')
+sha256sums=('947bd1ad17238e6402af044f848662a4c20e9a82e5a61062ef2e10bb6c2d4cfe')
 
 build() {
   cd "$pkgname-$pkgver"
@@ -115,7 +115,12 @@ check() {
   # back to the next create, so on the builder's /tmp the stranger is
   # identical and undo walks it back. tmpfs allocates inode numbers from a
   # counter and never reuses one, which is what the test assumes.
+  # copymanifest's garbage-stream test opens its O_TMPFILE manifest in its
+  # own test dir; the module's other tests must stay off tmpfs, because
+  # Writer::create wants a runtime dir on a different filesystem from the
+  # copy and finds none when both live on /dev/shm.
   local -a filesystem_tests=(
+    backend::copymanifest::tests::a_garbage_stream_falls_back_with_the_tree_untouched
     backend::menu_actions::tests::
     backend::menudelete::tests::
     backend::redo::tests::
