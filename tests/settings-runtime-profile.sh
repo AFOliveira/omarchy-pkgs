@@ -160,7 +160,7 @@ for recipe in omarchy-settings; do
     fail 'x86_64 ships the source HOOKS line as it is'
   cmp -s "$scratch/legacy/etc/sysctl.d/99-omarchy-sysctl.conf" "$scratch/legacy-x86_64/etc/sysctl.d/99-omarchy-sysctl.conf" ||
     fail 'x86_64 ships the source sysctl file'
-  ! cmp -s "$scratch/legacy/etc/sysctl.d/99-omarchy-sysctl.conf" "$scratch/legacy-aarch64/etc/sysctl.d/99-omarchy-sysctl.conf" ||
+  [[ $(grep -v '^#' "$scratch/legacy-aarch64/etc/sysctl.d/99-omarchy-sysctl.conf") == net.ipv4.tcp_mtu_probing=1 ]] ||
     fail 'older source keeps only the network tuning on aarch64'
   for path in "${x86_backup[@]}"; do
     in_list "$path" "$scratch/legacy-x86_64.backup" || fail "x86_64 backs up $path"
