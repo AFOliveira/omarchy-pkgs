@@ -1,7 +1,7 @@
 # Maintainer: Ryan Hughes <ryan@omarchy.org>
 pkgname='omarchy-settings-dev'
 pkgver=4.0.0.r6663.g3faafba
-pkgrel=3
+pkgrel=4
 # Pinned by the upstream watch in .omarchy/package.json (bin/sync-upstream):
 # every quattro tip becomes a commit pin here, so the package is versioned,
 # checksummed and built exactly like a release, just more often. The r-number
@@ -412,7 +412,9 @@ EOF
   fi
   # 00-omarchy-hooks.conf places a Mac through this detector copy; without it
   # an Aurora Mac gets the busybox line and its initramfs cannot unlock root.
-  if grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
+  # x86_64 keeps the busybox line either way.
+  if [[ $CARCH == aarch64 ]] &&
+    grep -qs omarchy-hw-platform "$pkgdir/etc/mkinitcpio.conf.d/00-omarchy-hooks.conf" &&
     [[ ! -x $pkgdir/usr/share/libalpm/scripts/omarchy-hw-platform ]]; then
     echo "etc/mkinitcpio.conf.d/00-omarchy-hooks.conf needs the omarchy-hw-platform copy the source does not ship" >&2
     return 1
