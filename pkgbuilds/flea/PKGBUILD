@@ -2,7 +2,7 @@
 
 pkgname=flea
 pkgver=0.3.5
-pkgrel=1
+pkgrel=2
 pkgdesc='Fast, keyboard-first file manager for Omarchy'
 arch=('x86_64' 'aarch64')
 url='https://github.com/thisisgm/flea'
@@ -42,6 +42,7 @@ optdepends=(
   '7zip: 7z archive support'
   'dropbox-cli: Dropbox browsing and share links'
   'ffmpeg: media metadata previews'
+  'ffmpegthumbnailer: video thumbnails'
   'imagemagick: image conversion'
   'libarchive: archive listing and extraction'
   'tailscale: Taildrop sharing'
@@ -202,12 +203,18 @@ package() {
   install -Dm644 packaging/com.thisisgm.flea.svg \
     "$pkgdir/usr/share/icons/hicolor/scalable/apps/com.thisisgm.flea.svg"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  # 0.3.5 notes on removal what flea --default and flea --picker leave in each user's config.
+  install -Dm644 packaging/flea.hook -t "$pkgdir/usr/share/libalpm/hooks"
 
   install -Dm644 ui/qmldir ui/*.qml -t "$pkgdir/usr/share/flea/ui"
   install -Dm644 ui/js/*.js -t "$pkgdir/usr/share/flea/ui/js"
+  # 0.3.2 launches from ui/boot, which keeps ui/qmldir's singletons off the startup path.
+  install -Dm644 ui/boot/shell.qml ui/boot/picker.qml -t "$pkgdir/usr/share/flea/ui/boot"
   # Flea's Shelf setting installs this plugin into the user's plugin directory.
   install -Dm644 shelf/manifest.json shelf/README.md shelf/*.qml shelf/*.js \
     -t "$pkgdir/usr/share/flea/shelf"
   ln -s /usr/share/omarchy/shell/Commons "$pkgdir/usr/share/flea/ui/Commons"
   ln -s /usr/share/omarchy/shell/Ui "$pkgdir/usr/share/flea/ui/Ui"
+  ln -s /usr/share/omarchy/shell/Commons "$pkgdir/usr/share/flea/ui/boot/Commons"
+  ln -s /usr/share/omarchy/shell/Ui "$pkgdir/usr/share/flea/ui/boot/Ui"
 }
