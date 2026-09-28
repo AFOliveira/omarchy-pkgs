@@ -1,7 +1,7 @@
 # Maintainer: Ryan Hughes <ryan@omarchy.org>
 pkgname='omarchy-settings-dev'
 pkgver=4.0.0.r6663.g3faafba
-pkgrel=2
+pkgrel=3
 # Pinned by the upstream watch in .omarchy/package.json (bin/sync-upstream):
 # every quattro tip becomes a commit pin here, so the package is versioned,
 # checksummed and built exactly like a release, just more often. The r-number
@@ -398,9 +398,11 @@ EOF
   # platform. It ships here, not in omarchy, so it is resident before the
   # runtime and any hardware package install; the hook, the script it runs and
   # the script's own copy of the platform detector travel together (omarchy
-  # keeps /usr/bin/omarchy-hw-platform). Conditional until the pinned source
-  # carries them.
-  if [[ -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
+  # keeps /usr/bin/omarchy-hw-platform). aarch64 only: no platform package is
+  # built for x86_64, so an x86 machine has nothing to guard, and its HOOKS
+  # baseline needs no detector. Conditional until the pinned source carries
+  # them.
+  if [[ $CARCH == aarch64 && -f default/libalpm/hooks/00-omarchy-platform-guard.hook ]]; then
     install -Dm644 default/libalpm/hooks/00-omarchy-platform-guard.hook \
       "$pkgdir/usr/share/libalpm/hooks/00-omarchy-platform-guard.hook"
     install -Dm755 default/libalpm/scripts/omarchy-platform-guard \
