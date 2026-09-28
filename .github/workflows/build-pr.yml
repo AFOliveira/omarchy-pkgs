@@ -95,8 +95,13 @@ jobs:
           if [[ -n "${{ github.event.inputs.packages }}" ]]; then
             names="${{ github.event.inputs.packages }}"
           else
+            # The PR's own files, as GitHub lists them against the merge base.
+            # A two-dot diff against the current base tip also counted every
+            # package master changed after the PR branched, so a stale PR
+            # planned dozens of unrelated packages at its old versions. The
+            # checkout here is shallow, so there is no merge base to diff from.
             # A package the PR deletes has nothing to build.
-            names=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" -- pkgbuilds \
+            names=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename' \
               | awk -F/ '$1=="pkgbuilds" && NF>2 {print $2}' | sort -u \
               | while read -r name; do
                   if git cat-file -e "${{ github.event.pull_request.head.sha }}:pkgbuilds/$name" 2>/dev/null; then echo "$name"; fi
