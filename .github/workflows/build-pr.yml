@@ -202,7 +202,10 @@ jobs:
           git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.head.sha }}"
           git checkout "${{ github.event.pull_request.head.sha }}" -- pkgbuilds/
           echo "tooling: $(git rev-parse --short HEAD) (base)  packages: ${{ github.event.pull_request.head.sha }} (PR head)"
-          git status --short | head
+          # A preview only. `head` exits after ten lines and, under pipefail,
+          # git's SIGPIPE (141) failed the step for any PR far enough behind
+          # master to differ in more files; sed reads the whole stream.
+          git status --short | sed -n '1,10p'
       - name: Build ${{ matrix.package }} (${{ matrix.arch }}, ships to ${{ matrix.channels }})
         id: build
         env:
