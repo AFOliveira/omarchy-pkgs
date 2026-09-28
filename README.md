@@ -901,6 +901,22 @@ build-and-publish chain, so the tracker requires this secret before it runs.
 The reviewed sync workflows continue to use `GITHUB_TOKEN` and require
 maintainer approval as before. See [setup instructions](docs/upstream-sources.md#enable-unattended-branch-updates).
 
+Scheduled runs regenerate one shared PR (`auto/sync-upstream`, `auto/sync-rebuilds`)
+from master. A manual run with the `packages` input only regenerates those
+packages, so it opens its own PR on `auto/sync-upstream-<packages>` (or
+`auto/sync-rebuilds-<packages>`) rather than replacing the shared PR's other
+pending updates. The next scheduled run still picks the same update up in the
+shared PR if it has not merged by then; identical package trees reuse the same
+build artifacts.
+
+Sync PRs are pushed with `GITHUB_TOKEN`, so GitHub holds their build and test
+runs for approval on every push and starts no `pull_request_target` workflow
+for them. Once **`build-approved`** is on a sync PR, the sync workflow's own
+`approve` job releases the held runs for each commit it pushes. A push to an
+`auto/sync-*` branch does not cancel the PR's in-flight build: the new build
+waits for it and then reuses its artifacts, so a long aarch64 build is not
+restarted by every sync.
+
 To approve builds for an unvouched contributor's PR, apply **`build-approved`**.
 Until approval, the PR shows **Awaiting build approval** and its required
 `result` check stays pending, keeping the PR blocked from merging without

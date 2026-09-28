@@ -20,9 +20,16 @@ on:
         description: "Space-separated package directories to build"
         required: true
 
+# A new push normally cancels the PR's in-flight build. The sync bots'
+# branches (auto/sync-*) are the exception: they are force-pushed with fresh
+# upstream releases several times a day, which kept cancelling multi-hour
+# aarch64 builds before they could finish. There the newest run waits
+# instead (GitHub keeps at most one pending run per group, replacing older
+# pending ones), and when it starts it reuses every artifact the finished
+# build uploaded, so only packages whose tree changed are built again.
 concurrency:
   group: build-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !(github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'auto/sync-')) }}
 
 jobs:
   # Builds cost real machines, so they run only for trusted authors:
