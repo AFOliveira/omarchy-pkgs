@@ -1,7 +1,7 @@
 # Maintainer: Ryan Hughes <ryan@heyoodle.com>
 
 pkgname=omarchy-hyprland-titlebars
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="Titlebars for Omarchy's floating workspaces"
 arch=('x86_64' 'aarch64')
@@ -16,7 +16,7 @@ depends_aarch64=('hyprland=0.56.2')
 makedepends=('cmake' 'pkgconf')
 options=('!lto' '!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('cd6ece3e3fc4afed4052cba5045faa1f6fb2e6a2203bddd7e85b9c57646bb10b')
+sha256sums=('73320b611eb768a18d61f2ed7ace8f5a94f523a7cbcce132b1db246288efd5b8')
 
 build() {
   cmake -S "$srcdir/$pkgname-$pkgver" -B build \
