@@ -20,6 +20,8 @@ local groups = {
 	"SignColumn",
 	"LineNr",
 	"CursorLineNr",
+	"StatusLine",
+	"StatusLineNC",
 	"NormalNC",
 	"WhichKeyFloat",
 	"TelescopeBorder",
