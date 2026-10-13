@@ -166,6 +166,17 @@ of the same version, bump `pkgrel`.
 A package is published for each architecture in its `arch=()`. An `arch=any`
 package builds once and goes into both architectures' databases.
 
+It also decides where each build runs (`package_runner` in
+`helpers/package-metadata.sh`):
+
+| Build | Runner |
+|---|---|
+| x86_64 | the droplet pool |
+| aarch64 | GitHub's `ubuntu-24.04-arm` (4 vCPU) |
+| aarch64 kernel (`linux-*`) | `namespace-profile-arm64-linux-apple-12x32` (Linux on Apple Silicon, 12 vCPU) |
+
+A build that has to be repeated at merge runs on the same runner.
+
 Everything not on the fast ring reaches `rc` and `stable` by promotion: see
 [Releases](#releases).
 
