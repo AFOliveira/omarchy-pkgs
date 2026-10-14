@@ -214,6 +214,8 @@ These packages were already excluded from automatic AUR updates. The migration p
 
 `cua-driver-bin` is a deliberate hold: Omarchy bumps it by hand, so a Cua release ships only when a maintainer has verified it. It keeps its `.omarchy/upstream.sh` hook and `min_release_age`, so lifting the hold means removing `"sync": false`. `cua-hyprland-plugin` declares no upstream source, so no automation updates it either.
 
+`omarchy-mlx` is a deliberate hold: its wheel's filename carries a per-build stamp (`mlx_omarchy-0.32.4.dev202610050725+5c15fba-…`) that a tag watch cannot derive, so the maintainer repins `_wheel`, the vendor tar, and the checksums together. It keeps its watch, so lifting the hold means removing `"sync": false` once the wheel's name follows the release version.
+
 ## Package-specific boundaries
 
 - NVIDIA watches remain on the 580 driver branch.
