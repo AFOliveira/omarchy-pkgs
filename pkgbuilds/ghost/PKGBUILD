@@ -2,8 +2,8 @@
 
 pkgbase=ghost
 pkgname=(ghost-runtime ghost)
-pkgver=0.6.0
-pkgrel=2
+pkgver=0.6.1
+pkgrel=1
 pkgdesc="Owner-local AI persona with a character, tools, and an Omarchy-native desktop shell"
 arch=('any')
 url="https://github.com/ferdousbhai/ghost"
@@ -49,8 +49,8 @@ source=(
 )
 noextract=("${_runtime}")
 sha256sums=(
-  '681320615fa6192fe57f8fe6ab1e36ae04a7680d7b371721762bfdedf48ac985'
-  '1c9c66ca0299dbf9d15a37e541f61352658bcb9700a067eec1081a3bfc1549f5'
+  'e12cdc9063480fe4454a42382298082e190a68ef11d495a4ff8383d0e8a6662e'
+  '9fd8d9935dd943ef83efa60950c5fbf89bbc440206bfe294f6c5af75b87832ee'
 )
 
 _release_identity() {
