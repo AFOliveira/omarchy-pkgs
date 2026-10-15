@@ -1,7 +1,7 @@
 # Maintainer: David Heinemeier Hansson <david@hey.com>
 
 pkgname=hype
-pkgver=0.5.0
+pkgver=0.6.0
 pkgrel=1
 pkgdesc='Simple Markdown presentations with a visual slide editor'
 arch=('x86_64' 'aarch64')
@@ -24,7 +24,7 @@ depends=(
 )
 makedepends=('gcc' 'make')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('7cbb2d9593a85117bb2675adbcbb830cebb95931881554d92ef3f7a390f48e71')
+sha256sums=('b42aba45493bafac8fa30fd4cef86fae0c0b171d7a95811e3c7ded4bdb893f13')
 
 build() {
   cd "$srcdir/$pkgname-$pkgver"
