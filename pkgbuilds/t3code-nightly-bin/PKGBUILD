@@ -7,7 +7,7 @@
 # updates the version and architecture-specific checksums together.
 
 pkgname=t3code-nightly-bin
-pkgver=0.0.46_nightly.20261015.3145
+pkgver=0.0.46_nightly.20261015.3158
 _upstream_version=${pkgver/_/-}
 pkgrel=1
 pkgdesc="Open-source control plane for coding agents (nightly)"
@@ -65,8 +65,8 @@ noextract=("${_appimage_x86_64}" "${_appimage_aarch64}")
 sha256sums=('55e9aca82941ba21daff12e67f5b6c8a2ecbd30eb0ff9fc6c6a625dfc5aacd51'
             '85572a955d917fc92da30f6d0ea515370c97950aefc8e12eb25c3673aa4cca6e'
             '935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43')
-sha256sums_x86_64=('4b6843489df25f31305a8921159b1306496fc10f3ed17285bcdbed8fc6ba9223')
-sha256sums_aarch64=('90a4a4ca300e623586d2162b38c75aa3345b5b227a9b6b00f451495e52dcd4ae')
+sha256sums_x86_64=('a42d3dd2d1f56b036c6e5d2ffa6cd9ea8db0c08351cbc5b86790f349d4f759be')
+sha256sums_aarch64=('59afaf8dcc6a1311913cd92b7514be80ce905c7b05cb137e72940b1b08a0b3c8')
 
 prepare() {
   local _appimage
