@@ -402,5 +402,15 @@ which reads OpenAI's Debian package index and never fetches the 750 MB of debs
 it describes. Hooks honoring `min_release_age` receive the window as
 `MIN_RELEASE_AGE_SECONDS` and report `published_at` alongside `pkgver`.
 
+`grok-bot` cannot follow that pattern. Cursor's apt index lags the Linux update
+feed the app itself follows, and the feed's digest is for an AppImage.
+`pkgbuilds/grok-bot/.omarchy/upstream.sh` reads the x64 and arm64 feeds, waits
+until both name the same version and commit, and downloads the two `.deb`s at
+that commit only when the version is newer than the recipe. The hook writes
+`_commit` itself: `bin/sync-upstream` rewrites `pkgver` and the checksum arrays,
+not other recipe variables, and the source URL is
+`downloads.cursor.com/grokbot/stable/<commit>/`. An hourly run that is already
+current does not download the debs.
+
 `bin/sync-upstream self-test` runs offline fixture tests over the release
 selection, quarantine backstop, duration parsing, and manifest validation.
