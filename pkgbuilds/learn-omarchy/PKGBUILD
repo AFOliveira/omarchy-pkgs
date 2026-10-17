@@ -1,8 +1,8 @@
 # Maintainer: Dan Wahlin <dwahlin@gmail.com>
 
 pkgname=learn-omarchy
-pkgver=0.2.2
-pkgrel=1
+pkgver=0.2.5
+pkgrel=2
 pkgdesc="Interactive, theme-aware courses for learning Omarchy"
 arch=('any')
 url="https://github.com/DanWahlin/learn-omarchy"
@@ -25,7 +25,7 @@ optdepends=(
 )
 options=('!strip')
 source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
-sha256sums=('67f14778c2b66d56c1504695b0e11cab603f1a002570abc94b4bae9b0bec6066')
+sha256sums=('b9a18b38b8600506870ca24d4ca75176c045600ccb696f7597dc4f992031bafd')
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"

