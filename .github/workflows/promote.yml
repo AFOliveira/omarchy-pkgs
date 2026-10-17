@@ -93,6 +93,10 @@ jobs:
           docker pull --quiet "$builder"
           mkdir -p "$RUNNER_TEMP/promote"
           : > "$RUNNER_TEMP/promote/record.jsonl"
+          # The builder image runs as its own unprivileged user, which does
+          # not own the runner's files; let it append to the record.
+          chmod 0777 "$RUNNER_TEMP/promote"
+          chmod 0666 "$RUNNER_TEMP/promote/record.jsonl"
           flags=()
           [[ $DRY_RUN == true ]] && flags+=(--dry-run)
           # One architecture after the other; a failure stops before the next
