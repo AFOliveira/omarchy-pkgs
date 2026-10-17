@@ -108,7 +108,8 @@ Questions and problems: open an issue on this repository.
    required checks are `result`, `self-tests` and `build-isolation`.
 3. **It merges itself when green**, if it changes only package files.
 4. **It is published to `edge`** within minutes of merging, and reaches
-   `rc` and `stable` with the next release. Say so in the PR if you think the
+   `rc` and `stable` when those channels are next
+   [promoted](#promote-a-channel). Say so in the PR if you think the
    package should reach `stable` immediately (the fast ring).
 
 Keep a package PR to these files, or it needs a maintainer to merge it by
@@ -161,7 +162,7 @@ of the same version, bump `pkgrel`.
 | Default | `edge` |
 | `"release_ring": "fast"` | `edge`, `rc` and `stable` |
 | `"channels": [...]` | never outside the listed channels; the other rows still apply within them |
-| `"pinned": true` (`omarchy`, `omarchy-settings`) | `edge`; `rc` and `stable` only through a release |
+| `"pinned": true` (`omarchy`, `omarchy-settings`) | `edge`; `rc` only through a [release candidate](#releases), `stable` by promotion |
 
 A package is published for each architecture in its `arch=()`. An `arch=any`
 package builds once and goes into both architectures' databases.
@@ -317,11 +318,11 @@ with who ran it.
 ### Check that a version is live
 
 What the recipe says, from an up-to-date checkout of `master` (`<recipe>` is
-the directory name under `pkgbuilds/`):
+the directory name under `pkgbuilds/`), and whether a channel still lacks it:
 
 ```bash
-bin/repo list --json | jq -r '.[] | select(.name == "<recipe>") | .version'
-bin/repo list                                   # Every recipe, as a table
+(cd pkgbuilds/<recipe> && makepkg --printsrcinfo | grep -E '^\s*(epoch|pkgver|pkgrel) =')
+bin/build --dry-run --mirror edge --package <recipe>   # "would build" lists what edge lacks
 ```
 
 What each channel serves. A database lists every package as
@@ -537,29 +538,30 @@ Details: [docs/upstream-sources.md](docs/upstream-sources.md),
 | `pinned` | Version is set per release on the `rc` branch. Used by `omarchy` and `omarchy-settings`. |
 | `rebuild_on` | Packages whose version change forces a rebuild of this one. |
 | `rebuilt_against` | Written by `bin/sync-rebuilds`. Don't edit. |
-| `skip_build` | Left the package out of the old host's unscoped builds. CI ignores it: a PR that touches the package builds and publishes it. |
+| `skip_build` | Leaves the package out of an unscoped local `bin/build`. CI ignores it: a PR that touches the package builds and publishes it. |
 | `sync` | `false` holds the package out of upstream updates, with or without an `upstream` declaration. |
 | `origin` | Where an imported recipe came from. Informational. |
 
 ## Releases
 
-Promoting a channel is a workflow: see [Promote a channel](#promote-a-channel).
+`bin/omarchy-release` runs a release train from a workstation. It pins the
+`omarchy` and `omarchy-settings` pair on the `rc` branch, then drives the
+workflows that do the work:
 
-Cutting an Omarchy release is **not** in the GitHub workflows yet. Building
-the release pair for `rc` is done with `bin/omarchy-release`, which was
-written for the old repository host, now abandoned.
+- **Build release candidate** (`release-rc.yml`) builds the `rc` branch's pins
+  for both architectures and publishes them to `rc`.
+- **Promote channel** (`promote.yml`) carries `rc` into `stable` when the
+  train ships, and `edge` into `rc` when a minor or major train opens.
 
-Read [docs/releases.md](docs/releases.md) before cutting a release.
+Both can also be run from the Actions tab. Read
+[docs/releases.md](docs/releases.md) before cutting a release.
 
 ## Rules
 
-- **Publish through `publish.yml` only.** Don't run `bin/repo release`,
-  `sync`, `push` or `deploy`. A second publisher overwrites the channel
-  database the first one wrote. The release train is the one exception: see
-  [docs/releases.md](docs/releases.md).
-- **Don't bring the old host's release timers back.** They run
-  `bin/repo release` every five minutes. Run `bin/setup` with
-  `--skip-timers`.
+- **Write channels through the workflows only.** `publish.yml`,
+  `promote.yml`, `release-rc.yml` and `unpublish.yml` share one lock, so only
+  one of them writes a channel database at a time. Anything else that writes
+  the bucket can overwrite a database another run just wrote.
 - **Never reuse a published filename for different bytes.** The CDN caches
   package files by name and keeps serving the old ones. Bump `pkgrel`.
 - **Don't merge a package PR before its builds are green.** `publish.yml`
@@ -578,7 +580,6 @@ bin/                           Tooling the workflows and local work call
 build/                         Builder image and the in-container build script
 helpers/                       Shell and Python shared by bin/ and the workflows
 ci/                            x86_64 builder pool: controller and runner setup
-systemd/                       Release timers for the repository host (abandoned)
 tests/                         Tests; test.yml runs them on every PR
 docs/                          Reference
 .github/workflows/             The pipeline
@@ -589,19 +590,22 @@ docs/                          Reference
 |---|---|---|
 | `build-pr.yml` | PR, dispatch | Builds changed packages; reports `result` |
 | `test.yml` | PR, dispatch | `self-tests` and `build-isolation` |
-| `publish.yml` | push to `master`, dispatch | Signs and publishes |
+| `publish.yml` | push to `master`, dispatch | Signs and publishes; brings `rc` and `stable` in line with `edge` for the fast ring |
+| `promote.yml` | dispatch | Promote channel: `edge` → `rc`, `rc` → `stable` |
+| `release-rc.yml` | dispatch | Build release candidate: the `rc` branch's pins into `rc` |
 | `unpublish.yml` | dispatch | Removes retired packages from channel databases |
 | `auto-merge-pr.yml` | PR events, dispatch | Enables auto-merge on trusted package PRs |
 | `approve-pr.yml` | PR events | Releases GitHub's hold on a `build-approved` PR's runs |
 | `sync-upstream.yml` | every 6 hours, dispatch | Upstream release PR |
 | `sync-rebuilds.yml` | every 6 hours, dispatch | Dependency rebuild PR |
 | `track-branches.yml` | hourly, dispatch | Branch tip PRs |
+| `package-prs.yml` | called by the sync workflows | Opens, updates and closes their PRs |
 | `builder-images.yml` | daily, changes to the image's inputs (push and PR), dispatch | Builds and tests the builder image; publishes it from `master` |
 
 Secrets: the `publish` environment (usable from `master` only) holds the
 signing key and bucket credentials: `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`,
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`. Its variable
-`OMARCHY_PUBLISH_PREFIX` redirects publish and unpublish to a scratch prefix
+`OMARCHY_PUBLISH_PREFIX` redirects every bucket write to a scratch prefix
 in the bucket for a proof run; it must be empty for live publishing.
 Repository secrets: `PKGS_BOT_TOKEN`, `BASECAMP_CHATBOT_URL`.
 
@@ -612,4 +616,3 @@ Repository secrets: `PKGS_BOT_TOKEN`, `BASECAMP_CHATBOT_URL`.
 - [docs/upstream-sources.md](docs/upstream-sources.md): declaring upstream releases
 - [docs/rebuild-triggers.md](docs/rebuild-triggers.md): rebuilding when a dependency moves
 - [docs/releases.md](docs/releases.md): cutting a release, versioning rules
-- [docs/repository-host.md](docs/repository-host.md): the old host pipeline (abandoned)

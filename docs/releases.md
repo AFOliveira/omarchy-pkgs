@@ -1,16 +1,18 @@
 # Cutting an Omarchy release
 
-The release train runs from `bin/omarchy-release`. Channels move with the
-**Promote channel** workflow ([below](#promoting-a-channel)); the RC build
-was written to execute on the old repository host, which is abandoned (see
-[repository-host.md](repository-host.md)), against a local copy of the
-published tree.
+The release train runs from `bin/omarchy-release` on a workstation, with
+`gh` signed in. The script pins the release pair, pushes branches and tags,
+and starts the two workflows that build and move packages:
 
-> `rc` builds the release pair with `bin/repo release`, and `ship` still
-> promotes with `bin/repo advance`, on the machine that holds the published
-> tree. No workflow replaces the RC build yet. Promote with the workflow
-> instead of letting `ship` run `advance`: that reads the source channel
-> from local disk.
+- **Build release candidate** (`.github/workflows/release-rc.yml`) builds the
+  `omarchy` and `omarchy-settings` pins on this repository's `rc` branch for
+  both architectures and publishes them to `rc`.
+- **Promote channel** (`.github/workflows/promote.yml`) carries one channel
+  into the next ([below](#promoting-a-channel)).
+
+Both run on the bucket inside the same lock as merges, and each records who
+started it and what it published, in its run summary and in the
+[publish log](../README.md#read-the-publish-log).
 
 `bin/omarchy-release` is the front door. A release train has three human
 moments, each one command — and bare `omarchy-release` observes reality
@@ -19,11 +21,21 @@ moments, each one command — and bare `omarchy-release` observes reality
 ```bash
 bin/omarchy-release              # shepherd: status + guided next step
 bin/omarchy-release start 4.0.2  # open the train: branch v4-0-2 + staging PR
+                                 # (a minor/major also promotes edge → rc)
 bin/omarchy-release pick         # choose merged PRs to cherry-pick (multi-select)
-bin/omarchy-release rc           # publish the next 4.0.2rcN to the rc channel
-bin/omarchy-release ship         # tag, final pins, promote rc → stable,
+bin/omarchy-release rc           # pin the next 4.0.2rcN, build it into rc
+bin/omarchy-release ship         # tag, final pins built into rc, promote rc → stable,
                                  # draft GitHub release, ISO, website — one swoop
 bin/omarchy-release doctor       # verify credentials/connections up front
+```
+
+`rc` and `ship` print each workflow run's URL and follow it to the end
+(`--no-wait` starts it and returns). A failed run stops the command; fix the
+cause and re-run it. To build the current pins again without cutting new
+ones, run **Build release candidate** from the Actions tab, or:
+
+```bash
+gh workflow run release-rc.yml -R omacom/omarchy-pkgs
 ```
 
 Versions are inferred from branch names (`v4-0-2` ⇒ `4.0.2rcN` ⇒ tag
@@ -57,10 +69,10 @@ Add `-f dry_run=true` to see the plan first.
 
 ## The pin engine
 
-The release pair is marked `"pinned": true`. It is built for `rc` only from
-the `rc` branch worktree, with `OMARCHY_RC_PINS=1` set (`omarchy-release rc`
-sets it), and never built for `stable`: stable gets it by promotion. A merge to
-`master` therefore cannot overwrite an RC in flight.
+The release pair is marked `"pinned": true`. It is built for `rc` only by
+**Build release candidate**, which takes the pins from the `rc` branch and sets
+`OMARCHY_RC_PINS=1`, and never built for `stable`: stable gets it by promotion.
+A merge to `master` therefore cannot overwrite an RC in flight.
 
 The `omarchy` and `omarchy-settings` packages are released as a pair, always
 built from the same upstream commit of basecamp/omarchy.
