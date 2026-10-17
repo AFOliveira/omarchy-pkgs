@@ -3,6 +3,7 @@
 #
 #   promote-channel --from <edge|rc> --to <rc|stable> --arch <arch> \
 #     [--dry-run] [--record FILE] [--batch-bytes N] [pkgbase...]
+#   promote-channel --fast-ring --from edge --to <rc|stable> --arch <arch> ...
 #
 # What it does, in order:
 #   1. pull both channels' current databases from the remote
@@ -13,7 +14,14 @@
 #      into rc) and the source holds a newer version, or one the
 #      destination lacks. A pkgbase moves whole: its split packages and
 #      -debug go with it, and a base the destination is ahead on for any of
-#      its packages is left alone rather than half moved.
+#      its packages is left alone rather than half moved. A recipe that no
+#      longer builds for the architecture leaves its old files where they are.
+#
+#      --fast-ring turns that around: only fast-ring pkgbases move, from edge
+#      straight to rc or stable. A merge publishes a fast-ring build to all
+#      three at once; this brings rc and stable back in line with edge when
+#      that did not happen (a package joining the fast ring after its build,
+#      or one published before CI covered its architecture).
 #   3. copy each planned file from the source channel, check it against the
 #      source database's SHA-256, and publish it with publish-artifact, in
 #      batches of about --batch-bytes so a runner's disk holds one batch at
@@ -41,6 +49,7 @@ source "$BUILD_ROOT/helpers/package-metadata.sh"
 REMOTE=${REMOTE:-pkgs.omarchy.org:omarchy-pkgs}
 PREFIX=${OMARCHY_PUBLISH_PREFIX:-}
 DRY_RUN=false
+FAST_RING=false
 RECORD=/dev/null
 BATCH_BYTES=$((2 * 1024 * 1024 * 1024))
 ONLY=()
@@ -51,18 +60,26 @@ while [[ $# -gt 0 ]]; do
   --arch) ARCH=$2; require_valid_arch "$ARCH"; shift 2 ;;
   --remote) REMOTE=$2; shift 2 ;;
   --dry-run) DRY_RUN=true; shift ;;
+  --fast-ring) FAST_RING=true; shift ;;
   --record) RECORD=$2; shift 2 ;;
   --batch-bytes) BATCH_BYTES=$2; shift 2 ;;
-  -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
   -*) print_error "Unknown option: $1"; exit 1 ;;
   *) ONLY+=("$1"); shift ;;
   esac
 done
 : "${FROM:?--from is required}" "${TO:?--to is required}" "${ARCH:?--arch is required}"
-case "$FROM->$TO" in
-edge-\>rc | rc-\>stable) ;;
-*) print_error "Channels move edge -> rc -> stable; refusing $FROM -> $TO"; exit 1 ;;
-esac
+if [[ $FAST_RING == true ]]; then
+  case "$FROM->$TO" in
+  edge-\>rc | edge-\>stable) ;;
+  *) print_error "The fast ring follows edge; refusing $FROM -> $TO"; exit 1 ;;
+  esac
+else
+  case "$FROM->$TO" in
+  edge-\>rc | rc-\>stable) ;;
+  *) print_error "Channels move edge -> rc -> stable; refusing $FROM -> $TO"; exit 1 ;;
+  esac
+fi
 [[ $BATCH_BYTES =~ ^[0-9]+$ ]] || { print_error "--batch-bytes must be a number"; exit 1; }
 
 SRC="$REMOTE/${PREFIX:+$PREFIX/}$FROM/$ARCH"
@@ -107,14 +124,10 @@ print_info "$FROM/$ARCH has $(wc -l < "$WORK/src.tsv") packages, $TO/$ARCH has $
 declare -A DEST_VER=()
 while IFS=$'\t' read -r name ver _; do DEST_VER[$name]=$ver; done < "$WORK/dest.tsv"
 
-# Recipes by the pkgbase they build: a directory is usually named after it,
-# but not always (pkgbuilds/yaru-icon-theme builds pkgbase yaru). As in
-# makepkg, a PKGBUILD without pkgbase builds the base of its first pkgname.
+# Recipes by the pkgbase they build, which is not always the directory name.
 declare -A RECIPE=()
 while IFS= read -r pkgdir; do
-  base=$(package_pkgbuild_var "$pkgdir" pkgbase "$ARCH" 2>/dev/null || true)
-  [[ -n $base ]] || base=$(package_pkgbuild_var "$pkgdir" pkgname "$ARCH" 2>/dev/null || true)
-  RECIPE[${base:-${pkgdir##*/}}]=$pkgdir
+  RECIPE[$(package_pkgbase "$pkgdir" "$ARCH")]=$pkgdir
 done < <(package_dirs)
 
 mapfile -t BASES < <(cut -f3 "$WORK/src.tsv" | sort -u)
@@ -142,6 +155,11 @@ hold_reason() { # hold_reason <pkgbase>
   local pkgdir=${RECIPE[$1]:-}
   [[ -n $pkgdir ]] || { echo "no recipe on this checkout"; return; }
   package_in_channel "$pkgdir" "$TO" || { echo "its channels exclude $TO"; return; }
+  package_supports_arch "$pkgdir" "$ARCH" || { echo "its recipe no longer builds for $ARCH"; return; }
+  if [[ $FAST_RING == true ]]; then
+    package_is_fast_ring "$pkgdir" || echo "not on the fast ring"
+    return
+  fi
   if ! package_moves_to_channel "$pkgdir" "$TO"; then
     if package_is_pinned "$pkgdir"; then echo "pinned: reaches $TO through a release"
     elif package_is_fast_ring "$pkgdir"; then echo "fast ring: published to $TO at merge"
