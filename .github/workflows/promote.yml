@@ -121,6 +121,8 @@ jobs:
         run: |
           set -euo pipefail
           touch "$RUNNER_TEMP/promote/record.jsonl"
+          # sources: [] stands in for the field publish runs fill, so the
+          # publish log's queries read both kinds of line.
           jq -s --arg sha "${{ github.sha }}" --arg run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --arg prefix "${OMARCHY_PUBLISH_PREFIX:-}" --arg event "${{ github.event_name }}" \
             --arg from "$FROM" --arg to "$TO" --arg actor "$ACTOR" --arg packages "$PACKAGES" \
@@ -130,7 +132,6 @@ jobs:
              target: (if $prefix == "" then "live" else $prefix end),
              dry_run: $dry_run, packages: ($packages | split(" ") | map(select(length > 0))),
              result: (if $outcome == "success" then "success" else "failed" end),
-             # Publish runs' field, empty here, so log queries read both kinds.
              sources: [],
              plan: [.[] | select(.type == "plan") | del(.type)],
              slots: [.[] | select(.type == "slot") | del(.type)]}' \

@@ -76,8 +76,11 @@ record() { jq -nc "$@" >> "$RECORD"; }
 # --- 1. pull both databases -------------------------------------------------
 # One line per package: name, version, base, filename, sha256, csize.
 read_db() { # read_db <remote dir> <out.tsv>
-  local dir="$1" out="$2" db="$WORK/$(basename "$2" .tsv).db.tar.zst"
-  if ! rclone lsf "$dir/" --s3-no-head 2>/dev/null | grep -qx 'omarchy.db.tar.zst'; then
+  local dir="$1" out="$2" db="$WORK/$(basename "$2" .tsv).db.tar.zst" listing
+  # List first, then match: under pipefail, grep -q leaving early would
+  # SIGPIPE a remote listing still streaming in and read as "no database".
+  listing=$(rclone lsf "$dir/" --s3-no-head 2>/dev/null || true)
+  if ! grep -qx 'omarchy.db.tar.zst' <<<"$listing"; then
     : > "$out"
     return 1
   fi
@@ -115,12 +118,14 @@ while IFS= read -r pkgdir; do
 done < <(package_dirs)
 
 mapfile -t BASES < <(cut -f3 "$WORK/src.tsv" | sort -u)
+declare -A IN_SOURCE=()
+for b in "${BASES[@]}"; do IN_SOURCE[$b]=1; done
 if (( ${#ONLY[@]} )); then
   # A name this architecture lacks is skipped, so one list serves both; a
   # name that is neither published nor a recipe is a typo.
   named=()
   for b in "${ONLY[@]}"; do
-    if printf '%s\n' "${BASES[@]}" | grep -qxF -- "$b"; then
+    if [[ -n ${IN_SOURCE[$b]:-} ]]; then
       named+=("$b")
     elif [[ -n ${RECIPE[$b]:-} ]]; then
       print_warning "$b is not in $FROM/$ARCH; skipping it for $ARCH"
