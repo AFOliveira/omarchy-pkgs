@@ -129,7 +129,11 @@ PR touching pkgbuilds/<package>/
   └─ build-pr.yml       one build per package and architecture, unsigned
 merge to master
   └─ publish.yml        collect the builds, sign, add to the channel
-                        databases, upload
+                        databases, upload; then bring rc and stable in line
+                        with edge for the fast ring
+by hand, from Actions or bin/omarchy-release
+  ├─ promote.yml        Promote channel: edge -> rc, rc -> stable
+  └─ release-rc.yml     Build release candidate: the rc branch's pins -> rc
 pkgs.omarchy.org        served from the R2 bucket omarchy-pkgs through a CDN
 ```
 
@@ -137,7 +141,8 @@ To ship a change: open a PR, wait for green, merge. Nothing else is needed.
 
 1. **Build.** `build-pr.yml` builds every package directory the PR touches,
    once, against `edge`. x86_64 builds on an ephemeral DigitalOcean droplet
-   (runner label `omarchy-builder`), aarch64 on GitHub's `ubuntu-24.04-arm`.
+   (runner label `omarchy-builder`), aarch64 on GitHub's `ubuntu-24.04-arm`
+   (aarch64 kernels on Namespace; see [the runner table](#where-a-package-is-published)).
    Each build is kept as a workflow artifact for 7 days, named
    `<package>-<arch>-<git tree hash of the package directory>`.
 2. **Merge.** Branch protection requires `result`, `self-tests` and
@@ -145,9 +150,13 @@ To ship a change: open a PR, wait for green, merge. Nothing else is needed.
 3. **Publish.** `publish.yml` runs on every push to `master` that touches
    `pkgbuilds/**`. It finds the artifact for exactly the merged tree, signs
    it, and publishes it to every channel and architecture the package ships
-   to. When no artifact exists it builds one first, in a separate job. It
-   reports in a comment on the merged PR and appends to the
-   [publish log](#read-the-publish-log).
+   to. When no artifact exists it builds one first, in a separate job. Its
+   last step copies `edge`'s file to `rc` or `stable` for any fast-ring
+   package either is missing. It reports in a comment on the merged PR and
+   appends to the [publish log](#read-the-publish-log).
+
+Nothing else moves on its own: `rc` and `stable` change only when someone
+[promotes](#promote-a-channel) them or [cuts a release](#releases).
 
 A package is built once and that one file is what every channel serves.
 **A published filename never changes its bytes.** To ship a different build
@@ -350,8 +359,9 @@ curl -fsSL https://pkgs.omarchy.org/stable/aarch64/omarchy.db | bsdtar -tf - | g
 
 ### Read the publish log
 
-A publish run appends one JSON line to
-`https://pkgs.omarchy.org/publish-log.jsonl` when it finishes, newest last.
+Every run that writes a channel (publish, promotion, release candidate)
+appends one JSON line to `https://pkgs.omarchy.org/publish-log.jsonl` when it
+finishes, newest last. A plan-only run writes nothing there.
 A rerun adds another line for the same run. The log records finished runs;
 for a cancelled one, [check the channel](#check-that-a-version-is-live).
 
@@ -376,7 +386,8 @@ for a cancelled one, [check the channel](#check-that-a-version-is-live).
 | `built`, `native-rebuild`, `native-build-failed` | Written by earlier versions of the workflow: built during the run, or failed to |
 
 `slots[].status` is `published` or `failed`. An empty `slots` means the run
-wrote no channel.
+wrote no channel. The fast-ring step's copies into `rc` and `stable` are
+slots of the same run.
 
 A [promotion](#promote-a-channel) appends a line with `"kind": "promote"`
 (publish runs have no `kind`) and these fields besides `time`, `commit`,
@@ -391,7 +402,11 @@ A [promotion](#promote-a-channel) appends a line with `"kind": "promote"`
 | `plan` | Each package promoted: `arch`, `base`, `name`, `from_version`, `to_version` (`null` when new to the destination), `file`, `size` |
 | `held` | Per architecture, how many packages stayed back, by reason |
 
-`sources` is always empty on a promotion.
+A [release candidate](#releases) appends a line with `"kind": "release-rc"`
+and, besides the common fields and `slots`: `pkgver` (the pinned version),
+`rc_commit` (the `rc` branch commit its pins came from), `actor` and `result`.
+
+`sources` is always empty on both kinds.
 
 ```bash
 log=https://pkgs.omarchy.org/publish-log.jsonl
@@ -408,8 +423,8 @@ curl -fsSL $log | jq -c --arg p "<package>" '
 
 # Every run where something failed
 curl -fsSL $log | jq -c '
-  select(any(.sources[]; .source | test("failed")) or any(.slots[]; .status == "failed"))
-  | {time, run, failed: [.sources[] | select(.source | test("failed")) | "\(.package) \(.arch) \(.source)"]}'
+  select(.result == "failed" or any(.sources[]; .source | test("failed")) or any(.slots[]; .status == "failed"))
+  | {time, run, kind: (.kind // "publish"), failed: [.sources[] | select(.source | test("failed")) | "\(.package) \(.arch) \(.source)"]}'
 ```
 
 A merge also gets a summary of its record as a comment on the PR. The record
@@ -437,8 +452,10 @@ Then act on which job failed:
 | `publish`, step "Collect artifacts" | `no artifact from the rebuild job` | Either that package's build failed (see the `rebuild` job), or its artifact expired mid-run. For the second, rerun every job: `gh run rerun <run-id>` |
 | `publish`, step "Collect artifacts" | the artifact could not be downloaded or unpacked | Rerun: `gh run rerun <run-id> --failed`. If it fails again the artifact is bad: bump `pkgrel` in a PR to get a fresh build |
 | `publish`, step "Publish" | `Already published with DIFFERENT bytes, refusing to overwrite` | That version is already out with other contents. Bump `pkgrel` in a PR |
+| `publish`, step "Publish" | `its artifact has no files with pkgbase <base>` | The build produced packages under another pkgbase than the recipe declares. Fix the recipe's `pkgbase`/`pkgname` in a PR |
 | `publish`, step "Publish" | `Upload incomplete`, or an rclone or gpg error | Storage or signing trouble. Rerun: `gh run rerun <run-id> --failed` |
-| `publish` shows cancelled, and nobody cancelled it | | GitHub keeps one publish waiting at a time; when several merges land close together it cancels the ones in between. Republish their packages with a dispatch |
+| `publish`, step "Bring the fast ring in line with edge" | `does not match its database entry`, or an rclone or gpg error | `edge`'s file or the bucket is at fault, not the merge: the merge itself published. Rerun: `gh run rerun <run-id> --failed`, or dispatch the package later |
+| `publish` shows cancelled | | Someone cancelled it, or it timed out. Merges queue for the publish lock rather than replacing each other. Republish the merge's packages with a dispatch |
 
 **The Publish step writes channels in a fixed order:** `edge` then `rc` then
 `stable`, x86_64 before aarch64. It stops at the first one that fails, so the
@@ -456,6 +473,15 @@ packages with a dispatch.
   `master`'s current version of the named packages.
 
 Afterwards, [check that the version is live](#check-that-a-version-is-live).
+
+**Promote channel and Build release candidate** write the same way: x86_64
+first, then aarch64, and a promotion in batches of about 2 GiB. What was
+written before a failure is complete, and a rerun picks up where it stopped
+(`gh run rerun <run-id> --failed`); the run's summary says what moved. A
+promoted file that does not match its source database (`does not match its
+database entry`) fails its batch before that batch writes anything.
+`bin/omarchy-release` stops when its run fails; run the same command again
+once the rerun has passed.
 
 ## Who can build and merge
 
