@@ -19,9 +19,9 @@ mkdir -p "$BIN"
 cp -r "$ROOT/helpers" "$T/root/"
 cp "$ROOT/bin/promote-channel" "$ROOT/bin/publish-artifact" "$BIN/"
 PKGBUILDS_DIR="$T/root/pkgbuilds"
-recipe() { # recipe <dir> <metadata json> [pkgbase]
+recipe() { # recipe <dir> <metadata json> [pkgbase] [arch]
   mkdir -p "$PKGBUILDS_DIR/$1/.omarchy"
-  echo "${3:+pkgbase=$3 }pkgname=$1" > "$PKGBUILDS_DIR/$1/PKGBUILD"
+  echo "${3:+pkgbase=$3 }pkgname=$1 arch=(${4:-x86_64})" > "$PKGBUILDS_DIR/$1/PKGBUILD"
   echo "$2" > "$PKGBUILDS_DIR/$1/.omarchy/package.json"
 }
 recipe alpha '{"source": "local"}'
@@ -32,6 +32,8 @@ recipe pinned '{"source": "local", "pinned": true}'
 recipe edgeonly '{"source": "local", "channels": ["edge"]}'
 recipe ahead '{"source": "local"}'
 recipe big '{"source": "local"}'
+# Built for x86_64 once; the recipe has since dropped it.
+recipe dropped '{"source": "local"}' "" aarch64
 
 # minimal real packages via makepkg; a second name makes a split package
 mkpkg() { # mkpkg <base> <pkgrel> [second pkgname]
@@ -69,7 +71,7 @@ fail() { echo "FAIL: $1"; cat "$T/out"; exit 1; }
 # rc: what stable users have now. edge: newer builds of most of it.
 pub rc $(mkpkg alpha 1) $(mkpkg fast 1) $(mkpkg pinned 1) $(mkpkg ahead 3)
 pub edge $(mkpkg alpha 2) $(mkpkg split 1 split-extra) $(mkpkg fast 2) $(mkpkg pinned 2) \
-  $(mkpkg edgeonly 1) $(mkpkg ahead 2) $(mkpkg big 1)
+  $(mkpkg edgeonly 1) $(mkpkg ahead 2) $(mkpkg big 1) $(mkpkg dropped 1)
 rc_before=$(entries rc)
 
 : > "$T/record"
@@ -86,7 +88,8 @@ promote || fail "promotion failed"
   && jq -e 'select(.name=="pinned") | .reason | test("pinned")' "$T/record" >/dev/null \
   && jq -e 'select(.name=="edgeonly") | .reason | test("channels exclude rc")' "$T/record" >/dev/null \
   && jq -e 'select(.name=="ahead") | .reason | test("rc is ahead")' "$T/record" >/dev/null \
-  && pass "fast ring, pinned, edge-only and rc-ahead packages are held back, each with its reason" || fail "hold reasons"
+  && jq -e 'select(.name=="dropped") | .reason | test("no longer builds for x86_64")' "$T/record" >/dev/null \
+  && pass "fast ring, pinned, edge-only, rc-ahead and dropped-arch packages are held back, each with its reason" || fail "hold reasons"
 
 cmp -s "$REMOTE/edge/x86_64/alpha-1.0-2-x86_64.pkg.tar.zst" "$REMOTE/rc/x86_64/alpha-1.0-2-x86_64.pkg.tar.zst" \
   && [[ -f "$REMOTE/rc/x86_64/alpha-1.0-2-x86_64.pkg.tar.zst.sig" ]] \
@@ -139,3 +142,21 @@ else grep -q 'refusing edge -> stable' "$T/out" && pass "channels only move one 
 "$BIN/promote-channel" --remote "$REMOTE" --from rc --to stable --arch x86_64 --record "$T/record" >"$T/out" 2>&1 || fail "rc -> stable"
 [[ $(plan_action pinned) == promote && $(plan_action fast) == hold ]] && [[ "$(entries stable)" == *"pinned-1.0-1 "* ]] \
   && pass "rc -> stable carries the pinned pair and holds the fast ring" || fail "stable promotion: $(entries stable)"
+
+# --fast-ring: rc and stable catch up with edge for fast-ring packages only,
+# from edge directly.
+fastring() { "$BIN/promote-channel" --remote "$REMOTE" --fast-ring --from edge --arch x86_64 --record "$T/record" "$@" >"$T/out" 2>&1; }
+: > "$T/record"
+fastring --to rc || fail "fast-ring sync to rc"
+[[ $(plan_action fast) == promote && $(plan_action alpha) == hold ]] && [[ "$(entries rc)" == *"fast-1.0-2 "* ]] \
+  && jq -e 'select(.name=="alpha") | .reason == "not on the fast ring"' "$T/record" >/dev/null \
+  && cmp -s "$REMOTE/edge/x86_64/fast-1.0-2-x86_64.pkg.tar.zst" "$REMOTE/rc/x86_64/fast-1.0-2-x86_64.pkg.tar.zst" \
+  && pass "--fast-ring brings rc in line with edge, fast-ring packages only" || fail "fast-ring rc: $(entries rc)"
+: > "$T/record"
+fastring --to stable && [[ "$(entries stable)" == *"fast-1.0-2 "* ]] && [[ $(plan_action alpha) == hold ]] \
+  && pass "--fast-ring goes from edge straight to stable" || fail "fast-ring stable: $(entries stable)"
+: > "$T/record"
+fastring --to rc && [[ $(plan_action fast) == current ]] && pass "--fast-ring is a no-op once the channels agree" || fail "fast-ring rerun"
+if "$BIN/promote-channel" --remote "$REMOTE" --fast-ring --from rc --to stable --arch x86_64 >"$T/out" 2>&1; then
+  fail "--fast-ring from rc should refuse"
+else grep -q 'fast ring follows edge' "$T/out" && pass "--fast-ring only follows edge" || fail "fast-ring direction reason"; fi

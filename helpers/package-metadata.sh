@@ -167,6 +167,16 @@ package_pkgbuild_var() {
   ' _ "$var")
 }
 
+# The pkgbase a recipe builds, as makepkg names it: pkgbase, else the first
+# pkgname. Usually the directory's name, but not always
+# (pkgbuilds/yaru-icon-theme builds pkgbase yaru).
+package_pkgbase() {
+  local pkgdir="$1" base
+  base=$(package_pkgbuild_var "$pkgdir" pkgbase "${2:-}" 2>/dev/null || true)
+  [[ -n "$base" ]] || base=$(package_pkgbuild_var "$pkgdir" pkgname "${2:-}" 2>/dev/null || true)
+  echo "${base:-${pkgdir##*/}}"
+}
+
 # The architectures declared by a PKGBUILD. Set CARCH while reading it so a
 # conditional arch=() assignment is evaluated for the architecture we are
 # actually checking, even when the repository host is a different one.

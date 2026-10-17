@@ -190,6 +190,11 @@ themes and fonts. A package that needs rebuilding when a dependency moves
 stays off it and reaches `rc` and `stable` with the release, together with
 the libraries it was built for.
 
+The three channels serve the same file. A merge that publishes a fast-ring
+build writes it to all three, and the same run copies `edge`'s file to `rc` or
+`stable` when either is behind, so moving a package onto the fast ring brings
+its current build along (see [Republish a package](#republish-a-package)).
+
 Both halves are enforced. `rebuild_on` and `"release_ring": "fast"` cannot be
 combined. And after a fast-ring package builds, `build-pr.yml` runs
 `bin/check-fast-ring`, which installs the package on `edge`, `rc` and `stable`
@@ -229,6 +234,12 @@ artifact when one exists and building otherwise. With no artifact, it skips a
 package that `edge` already holds at that version for that architecture; bump
 `pkgrel` to publish that one again. Spell the names as the directories under
 `pkgbuilds/`: an unknown name is ignored and the run still passes.
+
+A fast-ring package `edge` already holds is not skipped everywhere: every
+publish run ends by bringing `rc` and `stable` in line with `edge` for its
+fast-ring packages (`bin/promote-channel --fast-ring`), copying `edge`'s file
+where they are behind. Naming a fast-ring package here repairs a channel that
+never got it, such as one that joined the fast ring after its last build.
 
 For a run that failed, see [When a publish fails](#when-a-publish-fails).
 
